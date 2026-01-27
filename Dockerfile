@@ -21,6 +21,6 @@ RUN swag init
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/main .
 
 FROM alpine:latest
-WORKDIR /tagsamurai/api/analytics-reporting
+WORKDIR /tagsamurai/api/asset-transaction
 COPY --from=builder /app/main .
 CMD ["./main"]
