@@ -63,7 +63,7 @@ jobs:
           context: .
           builder: mybuilder
           push: true
-          tags: ${{ secrets.REGISTRY_HOST }}/ts-analytics-reporting:development
+          tags: ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development
           build-args: |
             USER=${{ secrets.USER }}
             PAT=${{ secrets.PAT }}
@@ -80,13 +80,13 @@ jobs:
           username: ${{ secrets.USERNAME }}
           password: ${{ secrets.PASSWORD }}
           script: |
-            docker stop ts-analytics-reporting || true
-            docker rm ts-analytics-reporting || true
-            docker rmi ${{ secrets.REGISTRY_HOST }}/ts-analytics-reporting:development || true
-            docker pull ${{ secrets.REGISTRY_HOST }}/ts-analytics-reporting:development
+            docker stop ts-asset-transaction || true
+            docker rm ts-asset-transaction || true
+            docker rmi ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development || true
+            docker pull ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development
             docker run -d --restart=always \
-              --name ts-analytics-reporting \
-              -p 5007:5007 \
-              -v ${{ secrets.FOLDER }}/.env:/tagsamurai/api/analytics-reporting/.env \
+              --name ts-asset-transaction \
+              -p 5013:5013 \
+              -v ${{ secrets.FOLDER }}/.env:/tagsamurai/api/asset-transaction/.env \
               --network microservices_network \
-              ${{ secrets.REGISTRY_HOST }}/ts-analytics-reporting:development
+              ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development
