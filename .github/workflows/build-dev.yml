@@ -1,0 +1,92 @@
+name: Build for dev
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: local_server
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "./go.mod"
+
+      - name: Install dependencies
+        run: |
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+          git config --global url."https://${{ secrets.USER }}:${{ secrets.PAT }}@gitea.tagsamurai.local/".insteadOf "https://gitea.tagsamurai.local/"
+          go env -w GOPRIVATE=gitea.tagsamurai.local/BETS-V2/ts-utils/v2
+          go mod tidy
+
+      - name: Vulnerabilities Check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Run tests with coverage
+        id: test
+        run: |
+          # Run tests with coverage and output to coverage.txt
+          go test -v $(go list ./... | grep -vE "client-partner/docs|client-partner/dto|client-partner/mocks|client-partner/route|client-partner/util|client-partner/pipeline") -coverprofile=coverage.txt -covermode=set -tags='!test'
+
+
+          # Calculate the coverage percentage
+          coverage=$(go tool cover -func=coverage.txt | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Coverage is $coverage%"
+          echo "::set-output name=coverage::$coverage"
+
+      - name: Check coverage threshold
+        run: |
+          MIN_COVERAGE=0.0  # Set your minimum coverage percentage here
+          coverage=${{ steps.test.outputs.coverage }}
+          if (( $(echo "$coverage < $MIN_COVERAGE" | bc -l) )); then
+            echo "Coverage ($coverage%) is below the threshold of $MIN_COVERAGE%"
+            exit 1
+          else
+            echo "Coverage ($coverage%) meets the threshold of $MIN_COVERAGE%"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          builder: mybuilder
+          push: true
+          tags: ${{ secrets.REGISTRY_HOST }}/ts-analytics-reporting:development
+          build-args: |
+            USER=${{ secrets.USER }}
+            PAT=${{ secrets.PAT }}
+
+  deploy:
+    name: Deploy Docker Image
+    needs: build
+    runs-on: local_server
+    steps:
+      - name: Deploy to dev server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          script: |
+            docker stop ts-analytics-reporting || true
+            docker rm ts-analytics-reporting || true
+            docker rmi ${{ secrets.REGISTRY_HOST }}/ts-analytics-reporting:development || true
+            docker pull ${{ secrets.REGISTRY_HOST }}/ts-analytics-reporting:development
+            docker run -d --restart=always \
+              --name ts-analytics-reporting \
+              -p 5007:5007 \
+              -v ${{ secrets.FOLDER }}/.env:/tagsamurai/api/analytics-reporting/.env \
+              --network microservices_network \
+              ${{ secrets.REGISTRY_HOST }}/ts-analytics-reporting:development
