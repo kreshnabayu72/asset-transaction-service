@@ -2,110 +2,36 @@ package main
 
 import (
 	"context"
-	"log/slog"
+	"log"
 	"os"
 	"os/signal"
-	"slices"
 	"syscall"
+	"time"
 
-	"gitea.tagsamurai.local/BETS-V2/analytics-reporting-service/internal/api"
-	"gitea.tagsamurai.local/BETS-V2/analytics-reporting-service/internal/app"
-	"gitea.tagsamurai.local/BETS-V2/analytics-reporting-service/internal/workflow"
-	"gitea.tagsamurai.local/BETS-V2/ts-utils/v2/provider"
-	"go.temporal.io/sdk/worker"
-
-	"gitea.tagsamurai.local/BETS-V2/ts-utils/v2/config"
-	"gitea.tagsamurai.local/BETS-V2/ts-utils/v2/service"
+	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/app"
+	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/config"
 )
 
-var isVerbose bool = false
-
 func main() {
-	args := os.Args[1:]
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	serviceApp := app.New(config.LoadConfig())
 
-	// TODO(refan): Better command args handler
-	logLevel := &slog.LevelVar{}
-	// You can enable debug mode by specifying -v for verbosity.
-	if slices.Contains(args, "-v") {
-		isVerbose = true
-		logLevel.Set(slog.LevelDebug)
-	}
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- serviceApp.Run()
+	}()
 
-	// TODO(refan): Further extend this functionality for writing out to file
-	// - Also for potential integration with any logging service in the future.
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		AddSource: true,
-		Level:     logLevel,
-	})))
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 
-	slog.Debug(
-		"os.Args",
-		"args", args,
-	)
+	select {
+	case err := <-serverErr:
+		log.Fatalf("server error: %v", err)
+	case <-signals:
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	slog.Debug("Loading environment variables...")
-	cfgOptions := config.LoadConfig(".env")
-	slog.Debug("Environment variables loaded.")
-
-	httpApp := app.MakeHttpApp(cfgOptions)
-
-	temporalService, err := service.MakeTemporalService(cfgOptions.SERVICE_NAME, cfgOptions)
-	if err != nil {
-		slog.Error("Error while creating temporal service",
-			"err", err,
-		)
-		panic(err)
-	}
-
-	workflow.RegisterWorkflows(temporalService, httpApp.ServiceManager)
-
-	dbProvider := new(provider.DBProvider)
-
-	httpApp.RegisterService("TemporalService", temporalService)
-	httpApp.RegisterService("DBProvider", dbProvider)
-
-	go runHttpApp(httpApp)
-	go runTemporalService(temporalService)
-
-	_ = <-sigs // blocks the main thread until an interrupt is received.
-	slog.Info("=== received SIGINT ===")
-
-	slog.Info("Gracefully shutting down...")
-	// You can execute task to release resources here.
-
-	// Shutdown Temporal service
-	temporalService.Close()
-
-	// Shutdown HTTP app
-	if err := httpApp.Shutdown(); err != nil {
-		slog.Error(
-			"Error while shutting down fiber",
-			"error", err,
-		)
-	}
-
-	slog.Info("Program successfully shutdown gracefully.")
-}
-
-func runHttpApp(httpApp *app.HttpApp) {
-	api.RegisterRoutes(httpApp.App, httpApp.ServiceManager)
-
-	if err := httpApp.Run(context.Background()); err != nil {
-		slog.Error(
-			"Error while trying to run http application",
-			"err", err,
-		)
-		panic(err)
-	}
-}
-
-func runTemporalService(temporalService service.TemporalServicer) {
-	if err := temporalService.Run(context.Background(), worker.InterruptCh()); err != nil {
-		slog.Error("Error while trying to run temporal service",
-			"err", err,
-		)
-		panic(err)
+		if err := serviceApp.Shutdown(shutdownCtx); err != nil {
+			log.Printf("shutdown error: %v", err)
+		}
 	}
 }

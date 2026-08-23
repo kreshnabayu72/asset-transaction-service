@@ -1,0 +1,35 @@
+#!/bin/sh
+set -e
+
+echo "Running pre-push checks..."
+
+unformatted=""
+for file in $(find . -name '*.go' -not -path './vendor/*'); do
+  if ! diff -q <(gofmt "$file" | tr -d '\r') <(tr -d '\r' < "$file") >/dev/null; then
+    unformatted="$unformatted $file"
+  fi
+done
+
+if [ -n "$unformatted" ]; then
+  echo "These files are not gofmt'd:"
+  for file in $unformatted; do echo "$file"; done
+  echo "Run: gofmt -w <file>"
+  exit 1
+fi
+
+echo "-> go vet"
+go vet ./...
+
+echo "-> go build"
+go build ./...
+
+echo "-> go test"
+go test ./...
+
+echo "-> staticcheck"
+go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20260820155219-7dc2d7d25b7f ./...
+
+echo "-> govulncheck"
+go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
+echo "Pre-push checks passed"

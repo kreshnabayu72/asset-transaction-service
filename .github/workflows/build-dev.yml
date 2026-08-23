@@ -21,9 +21,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          git config --global url."git@github.com:".insteadOf "https://github.com/"
-          git config --global url."https://${{ secrets.USER }}:${{ secrets.PAT }}@gitea.tagsamurai.local/".insteadOf "https://gitea.tagsamurai.local/"
-          go env -w GOPRIVATE=gitea.tagsamurai.local/BETS-V2/ts-utils/v2
           go mod tidy
 
       - name: Vulnerabilities Check
@@ -34,14 +31,10 @@ jobs:
       - name: Run tests with coverage
         id: test
         run: |
-          # Run tests with coverage and output to coverage.txt
-          go test -v $(go list ./... | grep -vE "client-partner/docs|client-partner/dto|client-partner/mocks|client-partner/route|client-partner/util|client-partner/pipeline") -coverprofile=coverage.txt -covermode=set -tags='!test'
-
-
-          # Calculate the coverage percentage
+          go test -v -coverprofile=coverage.txt -covermode=set ./...
           coverage=$(go tool cover -func=coverage.txt | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "Coverage is $coverage%"
-          echo "::set-output name=coverage::$coverage"
+          echo "coverage=$coverage" >> "$GITHUB_OUTPUT"
 
       - name: Check coverage threshold
         run: |
@@ -61,7 +54,6 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          builder: mybuilder
           push: true
           tags: ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development
           build-args: |
