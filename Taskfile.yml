@@ -1,0 +1,22 @@
+version: '3'
+
+tasks:
+  dev:
+    desc: Run Asset Transaction Service
+    cmds:
+      - go run ./main.go
+  test:
+    cmds:
+      - go test ./...
+  vet:
+    cmds:
+      - go vet ./...
+  build:
+    cmds:
+      - go build -trimpath -o bin/asset-transaction-service{{exeExt}} ./main.go
+  lint:
+    cmds:
+      - golangci-lint run ./...
+  setup-hooks:
+    cmds:
+      - bash ./scripts/setup-hooks.sh

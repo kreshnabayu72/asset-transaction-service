@@ -1,0 +1,13 @@
+name: asset-transaction-service
+
+services:
+  asset-transaction:
+    build:
+      context: .
+    image: ts-asset-transaction:local
+    environment:
+      PORT: "5013"
+      SERVICE_NAME: asset-transaction-service
+    # Local development only; production uses the gateway.
+    ports:
+      - "127.0.0.1:${ASSET_TRANSACTION_PORT:-5013}:5013"

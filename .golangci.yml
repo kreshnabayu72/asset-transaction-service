@@ -1,0 +1,90 @@
+version: "2"
+
+# Tag Samurai Platform - Canonical GolangCI-Lint Configuration (v2 Schema)
+# Enforces ADR 003 (4-Layer Purity), ADR 004, ADR 020, and Engineering Standards.
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck       # Ensure error returns are never silently ignored
+    - govet          # Standard Go vet checks (shadow, nilness, printf)
+    - ineffassign    # Detect ineffectual assignments
+    - staticcheck    # Advanced Go static analysis
+    - unused         # Find unused constants, variables, functions and types
+    - depguard       # Strictly enforce architectural layer boundaries (ADR 003)
+    - forbidigo      # Forbid raw fmt.Println (enforce structured log/slog)
+    - misspell       # Correct commonly misspelled words
+
+  settings:
+    govet:
+      enable:
+        - shadow
+        - nilness
+        - printf
+
+    depguard:
+      rules:
+        handler-purity:
+          list-mode: lax
+          files:
+            - "**/handler/**/*.go"
+            - "**/handler/*.go"
+          deny:
+            - pkg: "github.com/jackc/pgx"
+              desc: "ADR 003 Violation: Handlers must NEVER import pgx or execute SQL queries. Database access belongs strictly in repository/."
+            - pkg: "database/sql"
+              desc: "ADR 003 Violation: Handlers must NEVER import database/sql. Database access belongs strictly in repository/."
+            - pkg: "go.temporal.io/sdk"
+              desc: "ADR 003 Violation: Handlers must NEVER import Temporal SDK directly. Orchestration belongs in service/ and workflow/."
+            - pkg: "github.com/xuri/excelize"
+              desc: "ADR 003 Violation: Handlers must NEVER import excelize directly. Tag row structs with export:\"...\" and delegate to be-core-utils/helper.Export."
+            - pkg: "encoding/csv"
+              desc: "ADR 003 Violation: Handlers must NEVER import encoding/csv directly. Tag row structs with export:\"...\" and delegate to be-core-utils/helper.Export."
+
+        service-purity:
+          list-mode: lax
+          files:
+            - "**/service/**/*.go"
+            - "**/service/*.go"
+          deny:
+            - pkg: "github.com/jackc/pgx/v5/pgxpool"
+              desc: "ADR 003/004 Violation: Services must not manage raw connection pools. Delegate data queries to repository/."
+            - pkg: "github.com/xuri/excelize"
+              desc: "ADR 003 Violation: Services must NEVER import excelize directly. Tag row structs with export:\"...\" and delegate to be-core-utils/helper.Export."
+            - pkg: "encoding/csv"
+              desc: "ADR 003 Violation: Services must NEVER import encoding/csv directly. Tag row structs with export:\"...\" and delegate to be-core-utils/helper.Export."
+
+        repository-purity:
+          list-mode: lax
+          files:
+            - "**/repository/**/*.go"
+            - "**/repository/*.go"
+          deny:
+            - pkg: "go.temporal.io/sdk"
+              desc: "ADR 003 Violation: Repositories construct and execute DB queries only; they must NEVER invoke Temporal."
+
+    forbidigo:
+      forbid:
+        - pattern: '^fmt\.Print.*$'
+          msg: "ADR 020 / Engineering §15: Use log/slog with context (slog.InfoContext, slog.ErrorContext) instead of fmt.Print*."
+        - pattern: '^println$'
+          msg: "Use log/slog instead of builtin println."
+
+  exclusions:
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - depguard
+          - forbidigo
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
