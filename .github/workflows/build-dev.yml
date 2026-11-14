@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -21,7 +21,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          go mod tidy
+          git config --global url."https://${{ secrets.USER }}:${{ secrets.PAT }}@gitea.tagsamurai.local/".insteadOf "https://gitea.tagsamurai.local/"
+          go env -w GOPRIVATE=gitea.tagsamurai.local/*
+          GOWORK=off go mod tidy
+          GOWORK=off go mod tidy -diff
+          GOWORK=off go build ./...
 
       - name: Vulnerabilities Check
         run: |
@@ -31,14 +35,15 @@ jobs:
       - name: Run tests with coverage
         id: test
         run: |
-          go test -v -coverprofile=coverage.txt -covermode=set ./...
+          GOWORK=off go test ./... -coverprofile=coverage.txt -covermode=set
+
           coverage=$(go tool cover -func=coverage.txt | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "Coverage is $coverage%"
           echo "coverage=$coverage" >> "$GITHUB_OUTPUT"
 
       - name: Check coverage threshold
         run: |
-          MIN_COVERAGE=0.0  # Set your minimum coverage percentage here
+          MIN_COVERAGE=0.0
           coverage=${{ steps.test.outputs.coverage }}
           if (( $(echo "$coverage < $MIN_COVERAGE" | bc -l) )); then
             echo "Coverage ($coverage%) is below the threshold of $MIN_COVERAGE%"
@@ -49,13 +54,18 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
 
-      - name: Build and push Docker image
+      - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
-          tags: ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development
+          tags: ts-asset-transaction:development
+          outputs: type=docker,dest=/tmp/ts-asset-transaction.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          network: host
           build-args: |
             USER=${{ secrets.USER }}
             PAT=${{ secrets.PAT }}
@@ -65,6 +75,18 @@ jobs:
     needs: build
     runs-on: local_server
     steps:
+      - name: Upload to dev server
+        uses: garygrossgarten/github-action-scp@release
+        with:
+          local: /tmp/ts-asset-transaction.tar
+          remote: /tmp/ts-asset-transaction.tar
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+
+      - name: Clean up tmp file
+        run: rm -f /tmp/ts-asset-transaction.tar
+
       - name: Deploy to dev server
         uses: appleboy/ssh-action@v1
         with:
@@ -74,11 +96,11 @@ jobs:
           script: |
             docker stop ts-asset-transaction || true
             docker rm ts-asset-transaction || true
-            docker rmi ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development || true
-            docker pull ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development
+            docker rmi ts-asset-transaction:development || true
+            docker load -i /tmp/ts-asset-transaction.tar
+            rm /tmp/ts-asset-transaction.tar
             docker run -d --restart=always \
               --name ts-asset-transaction \
-              -p 5013:5013 \
               -v ${{ secrets.FOLDER }}/.env:/tagsamurai/api/asset-transaction/.env \
               --network microservices_network \
-              ${{ secrets.REGISTRY_HOST }}/ts-asset-transaction:development
+              ts-asset-transaction:development

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM golang:1.27.0 AS builder
+FROM golang:1.27.3 AS builder
 
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
