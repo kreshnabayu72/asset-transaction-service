@@ -9,6 +9,8 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/config"
+	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/group_guard"
+	groupGuardService "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/group_guard/service"
 )
 
 // App owns the HTTP server and its lifecycle.
@@ -27,6 +29,8 @@ func New(appConfig config.AppConfig) *App {
 	fiberApp.Get("/health", func(ctx fiber.Ctx) error {
 		return ctx.JSON(fiber.Map{"status": "ok"})
 	})
+
+	group_guard.SetupInternalRoutes(fiberApp, groupGuardService.NewService(), appConfig.ServiceToken)
 
 	return &App{
 		httpApp: fiberApp,
