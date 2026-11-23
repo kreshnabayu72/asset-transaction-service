@@ -9,14 +9,17 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/config"
+	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/consumer"
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/group_guard"
 	groupGuardService "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/group_guard/service"
+	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/repository"
 )
 
-// App owns the HTTP server and its lifecycle.
+// App owns the HTTP server, the iam event consumer and their lifecycle.
 type App struct {
-	httpApp *fiber.App
-	port    string
+	httpApp        *fiber.App
+	port           string
+	consumerCancel context.CancelFunc
 }
 
 // New creates the HTTP application with baseline middleware and routes.
@@ -32,9 +35,18 @@ func New(appConfig config.AppConfig) *App {
 
 	group_guard.SetupInternalRoutes(fiberApp, groupGuardService.NewService(), appConfig.ServiceToken)
 
+	// Keeps modified_by_name current when iam renames a user. Stops on Shutdown.
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	userRenamed := consumer.NewUserRenamedConsumer(appConfig.PostgresDB, repository.NewTransactionSettingsRepository(), appConfig.KafkaBrokers)
+	go func() {
+		defer func() { _ = userRenamed.Close() }()
+		userRenamed.Run(consumerCtx)
+	}()
+
 	return &App{
-		httpApp: fiberApp,
-		port:    appConfig.Port,
+		httpApp:        fiberApp,
+		port:           appConfig.Port,
+		consumerCancel: consumerCancel,
 	}
 }
 
@@ -45,5 +57,6 @@ func (a *App) Run() error {
 
 // Shutdown stops the HTTP server using the provided context.
 func (a *App) Shutdown(ctx context.Context) error {
+	a.consumerCancel()
 	return a.httpApp.ShutdownWithContext(ctx)
 }
