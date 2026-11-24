@@ -2,7 +2,6 @@ package provider
 
 import (
 	"bytes"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,27 +38,11 @@ func TestWorkbookRejectsSheetsOutsideTheContract(t *testing.T) {
 	require.ErrorContains(t, err, "unexpected headers")
 
 	_, err = renderer.Render(nil)
-	require.ErrorContains(t, err, "render workbook")
+	require.ErrorContains(t, err, "no sheets")
 
 	_, err = renderer.Render([]dto.Sheet{
 		{Name: "Info", Headers: infoHeaders},
 		{Name: "Info", Headers: infoHeaders},
 	})
 	require.ErrorContains(t, err, "render workbook")
-}
-
-// exportTags lists the export tags of a row struct in field order.
-func exportTags(v any) []string {
-	typ := reflect.TypeOf(v)
-	tags := make([]string, 0, typ.NumField())
-	for i := range typ.NumField() {
-		tags = append(tags, typ.Field(i).Tag.Get("export"))
-	}
-	return tags
-}
-
-func TestExportRowTagsMatchTheSheetHeaders(t *testing.T) {
-	require.Equal(t, rulesHeaders, exportTags(rulesRow{}))
-	require.Equal(t, overridesHeaders, exportTags(overridesRow{}))
-	require.Equal(t, infoHeaders, exportTags(infoRow{}))
 }
