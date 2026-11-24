@@ -2,10 +2,14 @@ gitea.tagsamurai.local/BETS-V2/service-contracts v0.0.6-0.20261111062530-3dddf6e
 gitea.tagsamurai.local/BETS-V2/service-contracts v0.0.6-0.20261111062530-3dddf6e610f5/go.mod h1:efIXfTz1bsYAtx9Xq+Fw/E3FnCStBWuEXyRjG6Zzfiw=
 gitea.tagsamurai.local/BETS-V2/service-contracts v0.0.6-0.20261124065246-e96afe58850c h1:o+MFABWQady9RY+n629A05mA0Bx3/7SbOww4NnFbtXk=
 gitea.tagsamurai.local/BETS-V2/service-contracts v0.0.6-0.20261124065246-e96afe58850c/go.mod h1:efIXfTz1bsYAtx9Xq+Fw/E3FnCStBWuEXyRjG6Zzfiw=
+gitea.tagsamurai.local/BETS-V2/service-contracts v0.0.6-0.20261124071453-47c19aa92885 h1:kBe50uWZhEonlZ70P0qrh/L8y6kMLCJTC8Lb47CN7mg=
+gitea.tagsamurai.local/BETS-V2/service-contracts v0.0.6-0.20261124071453-47c19aa92885/go.mod h1:efIXfTz1bsYAtx9Xq+Fw/E3FnCStBWuEXyRjG6Zzfiw=
 gitea.tagsamurai.local/BETS-V2/ts-utils/v2 v2.0.0-20261111062706-0bfedf867dbe h1:HTJPzCnsVXDPtm/XzVXymGQafut52rx7GmGHn3krs4M=
 gitea.tagsamurai.local/BETS-V2/ts-utils/v2 v2.0.0-20261111062706-0bfedf867dbe/go.mod h1:t+AiT92j2ji/LI8z05wQbSpcM9acRImAwSOxoa/ew8c=
 gitea.tagsamurai.local/BETS-V2/ts-utils/v2 v2.0.0-20261124032910-12902ef67dc6 h1:TBhAl95F6Dp5bEyipmsX1l7aS9xK+mZfRJSS0y7ANiI=
 gitea.tagsamurai.local/BETS-V2/ts-utils/v2 v2.0.0-20261124032910-12902ef67dc6/go.mod h1:t+AiT92j2ji/LI8z05wQbSpcM9acRImAwSOxoa/ew8c=
+gitea.tagsamurai.local/BETS-V2/ts-utils/v2 v2.0.0-20261124071604-4676047bc826 h1:IeIIsO9ztnkS5X7RYIkcuoieqvXy4xPOD/Wom/iw0a0=
+gitea.tagsamurai.local/BETS-V2/ts-utils/v2 v2.0.0-20261124071604-4676047bc826/go.mod h1:t+AiT92j2ji/LI8z05wQbSpcM9acRImAwSOxoa/ew8c=
 gitea.tagsamurai.local/Wangsit-Developer/be-core-utils v1.0.1-alpha.0.20261111062621-ca53bf14ac49 h1:lPM1RNTcpI8dpjGjO1Uv8YBPzIT+6DDP+XvyAlasw3g=
 gitea.tagsamurai.local/Wangsit-Developer/be-core-utils v1.0.1-alpha.0.20261111062621-ca53bf14ac49/go.mod h1:Nns/ncmXLDjZTB1BX+bLQKcBNcAwP7PT4/2++Uk/E28=
 gitea.tagsamurai.local/Wangsit-Developer/be-core-utils v1.0.1-alpha.0.20261124043131-86ccac002258 h1:TS3GPQ4n1Yurlt8T2o84k3IvcSOfXEaSOITNuVOAVBU=
