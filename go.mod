@@ -3,9 +3,9 @@ module gitea.tagsamurai.local/BETS-V2/asset-transaction-service
 go 1.27.4
 
 require (
-	gitea.tagsamurai.local/BETS-V2/service-contracts v0.0.6-0.20261111062530-3dddf6e610f5
-	gitea.tagsamurai.local/BETS-V2/ts-utils/v2 v2.0.0-20261111062706-0bfedf867dbe
-	gitea.tagsamurai.local/Wangsit-Developer/be-core-utils v1.0.1-alpha.0.20261111062621-ca53bf14ac49
+	gitea.tagsamurai.local/BETS-V2/service-contracts v0.0.6-0.20261124065246-e96afe58850c
+	gitea.tagsamurai.local/BETS-V2/ts-utils/v2 v2.0.0-20261124032910-12902ef67dc6
+	gitea.tagsamurai.local/Wangsit-Developer/be-core-utils v1.0.1-alpha.0.20261124043131-86ccac002258
 	gitea.tagsamurai.local/Wangsit-Developer/mig v1.0.3
 	github.com/gofiber/fiber/v3 v3.7.0
 	github.com/jackc/pgx/v5 v5.12.0
