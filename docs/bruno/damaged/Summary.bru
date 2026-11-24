@@ -1,0 +1,31 @@
+meta {
+  name: Damaged Summary
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v2/asset-transaction/damaged/summary
+  body: none
+  auth: none
+}
+
+headers {
+  X-User-ID: {{userId}}
+  X-Client-ID: {{clientId}}
+}
+
+tests {
+  test("Damaged summary is returned", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Damaged tab badge count: running records in Waiting for Confirmation or Damaged without a Missing marker, within the caller's Aktor Damaged scope. badgeCount is null when the caller is not Aktor Damaged on any group.
+
+  - 200 Success: data {badgeCount}
+  - 401 Unauthorized
+  - 403 Forbidden: data {reason}
+  - 500 Internal server error
+}

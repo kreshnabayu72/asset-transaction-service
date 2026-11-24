@@ -1,0 +1,36 @@
+meta {
+  name: Damaged Running Record
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v2/asset-transaction/damaged/assets/:assetId/running-record
+  body: none
+  auth: none
+}
+
+params:path {
+  assetId: 1924881519926425600
+}
+
+headers {
+  X-User-ID: {{userId}}
+  X-Client-ID: {{clientId}}
+}
+
+tests {
+  test("Running record is returned", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Running Damage record of an asset for the Asset Detail banner, the mobile scan result and the single-asset Report Damaged entry point. data is null when the asset has none.
+
+  - 200 Success: data {_id, status, missingMarker, reportedAt}
+  - 401 Unauthorized
+  - 403 Forbidden: data {reason}
+  - 404 Asset not found
+  - 500 Internal server error
+}
