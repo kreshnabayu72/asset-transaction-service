@@ -17,6 +17,8 @@ type AppConfig struct {
 	PostgresDB string
 	// KafkaBrokers is the comma-separated Redpanda broker list for the iam.user.renamed consumer.
 	KafkaBrokers string
+	// IAMBaseURL is iam's internal address; the RBAC middleware asks it for the caller's roles.
+	IAMBaseURL string
 }
 
 // LoadConfig loads an optional .env file and returns environment-backed settings.
@@ -29,5 +31,6 @@ func LoadConfig() AppConfig {
 		ServiceToken: os.Getenv("SERVICE_TOKEN"),
 		PostgresDB:   cmp.Or(os.Getenv("POSTGRES_DB"), "tagsamurai_asset_transaction"),
 		KafkaBrokers: cmp.Or(os.Getenv("KAFKA_BROKERS"), "localhost:9092"),
+		IAMBaseURL:   os.Getenv("IAM_BASE_URL"),
 	}
 }
