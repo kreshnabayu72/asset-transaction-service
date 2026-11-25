@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"log/slog"
+	"net"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
+	temporalclient "go.temporal.io/sdk/client"
 
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/config"
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/consumer"
@@ -14,6 +17,8 @@ import (
 	groupGuardService "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/group_guard/service"
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings"
 	transactionSettingsHandler "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings/handler"
+	transactionSettingsProvider "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings/provider"
+	transactionSettingsRepository "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings/repository"
 	transactionSettingsService "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings/service"
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/repository"
 	tsMiddleware "gitea.tagsamurai.local/BETS-V2/ts-utils/v2/middleware"
@@ -24,6 +29,7 @@ type App struct {
 	httpApp        *fiber.App
 	port           string
 	consumerCancel context.CancelFunc
+	temporalClient temporalclient.Client
 }
 
 // New creates the HTTP application with baseline middleware and routes.
@@ -50,16 +56,47 @@ func New(appConfig config.AppConfig) *App {
 	// ADR 013: the snapshot loader mounts once, before every protected route.
 	fiberApp.Use(tsMiddleware.LoadUserRoles(appConfig.IAMBaseURL, appConfig.ServiceToken))
 
-	// No plan provider, workbook renderer or activity-log dispatcher exists yet (DQ-61):
-	// the plan reads as FullPlan and export answers 500 until a renderer is wired.
-	settingsSvc := transactionSettingsService.NewService(nil, nil)
+	var temporalClient temporalclient.Client
+	if appConfig.TemporalHost != "" && appConfig.AnalyticsReportingTaskQueue != "" {
+		connected, err := temporalclient.Dial(temporalclient.Options{
+			HostPort:  net.JoinHostPort(appConfig.TemporalHost, appConfig.TemporalPort),
+			Namespace: appConfig.TemporalNamespace,
+		})
+		if err != nil {
+			slog.Warn("Temporal client unavailable; Transaction Settings change logs will be skipped", "error", err)
+		} else {
+			temporalClient = connected
+		}
+	}
+
+	// Rules and version come from the tenant database. Owner-service providers answer categories, assets,
+	// override targets, Group scope and deny contacts; the plan is read per request from the plan provider
+	// (EMS subscriptions and capacities, IAM approver presence), and a provider failure answers 500.
+	settingsRepo := transactionSettingsRepository.NewTransactionSettingsRepository(transactionSettingsRepository.NewTenantServicerFactory(appConfig.PostgresDB))
+	settingsSvc := transactionSettingsService.NewService(settingsRepo, transactionSettingsProvider.NewWorkbookRenderer())
+	txProviders := transactionSettingsProvider.NewProviders(transactionSettingsProvider.Endpoints{
+		MasterAssetRegistry:  appConfig.MasterAssetRegistryBaseURL,
+		EnterpriseManagement: appConfig.EnterpriseManagementBaseURL,
+		IAM:                  appConfig.IAMBaseURL,
+	}, appConfig.ServiceToken)
+	settingsSvc = settingsSvc.
+		WithCategoryDirectory(txProviders.Categories).
+		WithAssetDirectory(txProviders.Assets).
+		WithOverrideTargetDirectory(txProviders.OverrideTargets).
+		WithGroupScopeDirectory(txProviders.GroupScope).
+		WithDenyContactResolver(txProviders.DenyContacts)
+	if temporalClient != nil {
+		txChangeLogs := transactionSettingsProvider.NewChangeLogDispatcher(temporalClient, appConfig.AnalyticsReportingTaskQueue)
+		settingsSvc = settingsSvc.WithChangeLogDispatcher(txChangeLogs).WithActivityEntryDispatcher(txChangeLogs)
+	}
 	transaction_settings.SetupRoutes(fiberApp, transactionSettingsHandler.NewHandler(settingsSvc,
-		func(fiber.Ctx) transactionSettingsService.Plan { return transactionSettingsService.FullPlan }))
+		transactionSettingsHandler.PlanFromProvider(txProviders.Plans.Plan)))
 
 	return &App{
 		httpApp:        fiberApp,
 		port:           appConfig.Port,
 		consumerCancel: consumerCancel,
+		temporalClient: temporalClient,
 	}
 }
 
@@ -71,5 +108,9 @@ func (a *App) Run() error {
 // Shutdown stops the HTTP server using the provided context.
 func (a *App) Shutdown(ctx context.Context) error {
 	a.consumerCancel()
-	return a.httpApp.ShutdownWithContext(ctx)
+	err := a.httpApp.ShutdownWithContext(ctx)
+	if a.temporalClient != nil {
+		a.temporalClient.Close()
+	}
+	return err
 }
