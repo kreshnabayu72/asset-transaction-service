@@ -12,7 +12,11 @@ import (
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/consumer"
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/group_guard"
 	groupGuardService "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/group_guard/service"
+	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings"
+	transactionSettingsHandler "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings/handler"
+	transactionSettingsService "gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings/service"
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/repository"
+	tsMiddleware "gitea.tagsamurai.local/BETS-V2/ts-utils/v2/middleware"
 )
 
 // App owns the HTTP server, the iam event consumer and their lifecycle.
@@ -42,6 +46,15 @@ func New(appConfig config.AppConfig) *App {
 		defer func() { _ = userRenamed.Close() }()
 		userRenamed.Run(consumerCtx)
 	}()
+
+	// ADR 013: the snapshot loader mounts once, before every protected route.
+	fiberApp.Use(tsMiddleware.LoadUserRoles(appConfig.IAMBaseURL, appConfig.ServiceToken))
+
+	// No plan provider, workbook renderer or activity-log dispatcher exists yet (DQ-61):
+	// the plan reads as FullPlan and export answers 500 until a renderer is wired.
+	settingsSvc := transactionSettingsService.NewService(nil, nil)
+	transaction_settings.SetupRoutes(fiberApp, transactionSettingsHandler.NewHandler(settingsSvc,
+		func(fiber.Ctx) transactionSettingsService.Plan { return transactionSettingsService.FullPlan }))
 
 	return &App{
 		httpApp:        fiberApp,
