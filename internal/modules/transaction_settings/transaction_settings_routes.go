@@ -38,7 +38,7 @@ func SetupRoutes(app *fiber.App, h *handler.Handler) {
 			rbac.FixedAssetSystemRole(middleware.PermEdit, enum.SystemRoleKeyManageAssetAndTAG),
 		),
 	)
-	group := app.Group("/v2/asset-transaction/fixed-asset/transaction-settings")
+	group := app.Group("/fixed-asset/transaction-settings")
 	group.Get("/", canRead, h.ReadTransactionSettings)
 	group.Patch("/", canSave, h.SaveTransactionSettings)
 	group.Post("/export", canRead, h.ExportTransactionSettings)
