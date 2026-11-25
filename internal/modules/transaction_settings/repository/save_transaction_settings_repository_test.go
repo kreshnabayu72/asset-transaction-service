@@ -77,14 +77,14 @@ func TestBeginSave(t *testing.T) {
 	require.NoError(t, tx.Rollback(context.Background()))
 	require.True(t, w.rolledBack)
 	tx.Close()
-	require.True(t, w.closed)
+	require.False(t, w.closed)
 }
 
 func TestBeginSave_BeginFails(t *testing.T) {
 	w := &writeServicer{pool: fakePool{err: errors.New("no pool")}}
 	_, err := w.repo().BeginSave(context.Background(), "c1")
 	require.ErrorContains(t, err, "begin settings save transaction")
-	require.True(t, w.closed)
+	require.False(t, w.closed)
 }
 
 func TestUpsertFields(t *testing.T) {

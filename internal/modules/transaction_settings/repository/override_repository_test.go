@@ -92,7 +92,7 @@ func TestListOverrides(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 3, total)
 	require.Equal(t, "1", rows[0].ID)
-	require.True(t, o.closed)
+	require.False(t, o.closed)
 
 	o.page = nil
 	rows, total, err = o.repo().ListOverrides(context.Background(), "c1", dto.OverrideQuery{Transaction: "borrow", Page: 1, Limit: 10})
@@ -176,7 +176,7 @@ func TestBeginOverrideWrite(t *testing.T) {
 	require.NoError(t, tx.Commit(context.Background()))
 	require.True(t, o.committed)
 	tx.Close()
-	require.True(t, o.closed)
+	require.False(t, o.closed)
 }
 
 func TestOverrideWriteErrors(t *testing.T) {

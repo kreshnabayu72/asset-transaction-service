@@ -13,7 +13,6 @@ import (
 // nil, otherwise the Company default rows followed by the rows of that Category.
 func (r *TransactionSettingsRepository) FindExportFields(ctx context.Context, clientID string, categoryID *int64) ([]model.TransactionRuleField, error) {
 	svc := r.open(clientID)
-	defer svc.Close()
 
 	var out []model.TransactionRuleField
 	if categoryID != nil {
@@ -34,7 +33,6 @@ func (r *TransactionSettingsRepository) FindExportFields(ctx context.Context, cl
 // categoryID is nil, otherwise those of that Category followed by the All categories overrides.
 func (r *TransactionSettingsRepository) FindExportOverrides(ctx context.Context, clientID string, categoryID *int64) ([]model.TransactionRuleOverride, error) {
 	svc := r.open(clientID)
-	defer svc.Close()
 
 	var out []model.TransactionRuleOverride
 	query, args, err := query_builder.BuildExportOverridesQuery(categoryID)
