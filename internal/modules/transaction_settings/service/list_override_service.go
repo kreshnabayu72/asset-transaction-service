@@ -68,25 +68,25 @@ func parseListQuery(req dto.ListOverridesRequest) (dto.OverrideQuery, []dto.Fiel
 	if req.Page != nil {
 		q.Page = *req.Page
 		if q.Page < 1 {
-			errs = append(errs, dto.FieldError{Field: "page", Message: msgInvalidPage})
+			errs = append(errs, dto.FieldError{Field: "page", Message: msgMinOne})
 		}
 	}
 	if req.Limit != nil {
 		q.Limit = *req.Limit
 		if !slices.Contains(constants.PageSizes, q.Limit) {
-			errs = append(errs, dto.FieldError{Field: "limit", Message: msgInvalidLimit})
+			errs = append(errs, dto.FieldError{Field: "limit", Message: msgInvalidOption})
 		}
 	}
 	if req.SortBy != nil {
 		q.SortBy = *req.SortBy
 		if !slices.Contains(constants.OverrideSortKeys, q.SortBy) {
-			errs = append(errs, dto.FieldError{Field: "sortBy", Message: msgInvalidSort})
+			errs = append(errs, dto.FieldError{Field: "sortBy", Message: msgInvalidOption})
 		}
 	}
 	if req.SortOrder != nil {
 		q.SortOrder = *req.SortOrder
 		if q.SortOrder != 1 && q.SortOrder != -1 {
-			errs = append(errs, dto.FieldError{Field: "sortOrder", Message: msgInvalidOrder})
+			errs = append(errs, dto.FieldError{Field: "sortOrder", Message: msgInvalidOption})
 		}
 	}
 	errs = append(errs, parseNodeFilter(&q, req.Transaction, req.CategoryID, req.Category, req.CreatedAt)...)

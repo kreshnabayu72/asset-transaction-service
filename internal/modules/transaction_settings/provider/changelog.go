@@ -50,14 +50,11 @@ type auditFields struct {
 	createdBySnapshot string
 }
 
-// DispatchChangeLogs starts one workflow for the Changelog documents of one save. Every row is checked before
-// anything starts, so an incomplete row never reaches the analytics retry loop.
-func (d *ChangeLogDispatcher) DispatchChangeLogs(ctx context.Context, clientID string, entries []service.ChangeLogEntry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	rows := make([]analyticsTemporal.ChangeLog, 0, len(entries))
-	for _, e := range entries {
+// DispatchLogs starts one workflow for the Changelog documents and Activity Log rows of one save. Every row is checked
+// before anything starts, so an incomplete row never reaches the analytics retry loop.
+func (d *ChangeLogDispatcher) DispatchLogs(ctx context.Context, clientID string, changes []service.ChangeLogEntry, activity []service.ActivityLogEntry) error {
+	rows := make([]analyticsTemporal.ChangeLog, 0, len(changes)+len(activity))
+	for _, e := range changes {
 		row, err := changeLogRow(clientID, auditFields{
 			logTable:          e.LogTable,
 			object:            e.ObjectPath,
@@ -74,16 +71,7 @@ func (d *ChangeLogDispatcher) DispatchChangeLogs(ctx context.Context, clientID s
 		}
 		rows = append(rows, row)
 	}
-	return d.start(ctx, clientID, rows)
-}
-
-// DispatchActivityEntries starts one workflow for the structured Activity Log entries of one request.
-func (d *ChangeLogDispatcher) DispatchActivityEntries(ctx context.Context, clientID string, entries []service.ActivityLogEntry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	rows := make([]analyticsTemporal.ChangeLog, 0, len(entries))
-	for _, e := range entries {
+	for _, e := range activity {
 		row, err := changeLogRow(clientID, auditFields{
 			logTable:          e.LogTable,
 			object:            e.Object,
@@ -100,7 +88,15 @@ func (d *ChangeLogDispatcher) DispatchActivityEntries(ctx context.Context, clien
 		}
 		rows = append(rows, row)
 	}
+	if len(rows) == 0 {
+		return nil
+	}
 	return d.start(ctx, clientID, rows)
+}
+
+// DispatchActivityEntries starts one workflow for the structured Activity Log entries of one request.
+func (d *ChangeLogDispatcher) DispatchActivityEntries(ctx context.Context, clientID string, entries []service.ActivityLogEntry) error {
+	return d.DispatchLogs(ctx, clientID, nil, entries)
 }
 
 // changeLogRow maps one entry to an analytics ChangeLog of product fixed_asset. LogTable and Object default to the

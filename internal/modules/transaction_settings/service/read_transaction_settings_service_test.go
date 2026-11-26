@@ -102,7 +102,7 @@ func TestReadTransactionSettings_PlanNoneAndGating(t *testing.T) {
 	require.True(t, fieldOf(t, borrow, constants.FieldRequireApproval).Gated)
 	require.Equal(t, true, fieldOf(t, borrow, constants.FieldRequireApproval).Value)
 	require.False(t, fieldOf(t, borrow, constants.FieldMaxDuration).Gated)
-	require.True(t, fieldOf(t, assign, constants.FieldAllowedAssigneeEmployee).Gated)
+	require.False(t, fieldOf(t, assign, constants.FieldAllowedAssigneeEmployee).Gated)
 	require.False(t, fieldOf(t, assign, constants.FieldPhotoAtStart).Gated)
 	require.True(t, fieldOf(t, disposal, constants.FieldApprovalType).Gated)
 	require.False(t, fieldOf(t, disposal, constants.FieldAllowDisposal).Gated)

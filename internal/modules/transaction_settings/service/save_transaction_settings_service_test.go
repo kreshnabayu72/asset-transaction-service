@@ -14,22 +14,31 @@ import (
 )
 
 type fakeChangeLogs struct {
-	entries []ChangeLogEntry
-	err     error
+	calls    int
+	entries  []ChangeLogEntry
+	activity []ActivityLogEntry
+	err      error
 }
 
-func (f *fakeChangeLogs) DispatchChangeLogs(_ context.Context, _ string, e []ChangeLogEntry) error {
+func (f *fakeChangeLogs) DispatchLogs(_ context.Context, _ string, e []ChangeLogEntry, a []ActivityLogEntry) error {
+	f.calls++
 	f.entries = append(f.entries, e...)
+	f.activity = append(f.activity, a...)
 	return f.err
 }
 
 type fakeCategories struct {
-	infos map[int64]CategoryInfo
-	err   error
+	infos  map[int64]CategoryInfo
+	leaves []LeafCategory
+	err    error
 }
 
 func (f *fakeCategories) LookupCategory(_ context.Context, _ string, id int64) (CategoryInfo, error) {
 	return f.infos[id], f.err
+}
+
+func (f *fakeCategories) ListLeafCategories(_ context.Context, _ string) ([]LeafCategory, error) {
+	return f.leaves, f.err
 }
 
 func sf(key, mode, value string) dto.SaveField {
@@ -67,8 +76,8 @@ func validationErrors(t *testing.T, err error) []dto.FieldError {
 
 func TestSave_CompanyDefaultChangeWritesBumpsAndLogs(t *testing.T) {
 	repo := &fakeRepo{}
-	acts, logs := &fakeActivities{}, &fakeChangeLogs{}
-	svc := NewService(repo, nil).WithActivityEntryDispatcher(acts).WithChangeLogDispatcher(logs)
+	logs := &fakeChangeLogs{}
+	svc := NewService(repo, nil).WithChangeLogDispatcher(logs)
 	res, err := svc.SaveTransactionSettings(context.Background(), saveInput(FullPlan,
 		change("", "borrow", sf("max_duration", "own", "25"), sf("allowed_borrower", "own", `"same_group_only"`))))
 	require.NoError(t, err)
@@ -80,10 +89,11 @@ func TestSave_CompanyDefaultChangeWritesBumpsAndLogs(t *testing.T) {
 	require.True(t, repo.tx.closed)
 	require.Equal(t, "25", string(*repo.tx.rows[0].Value))
 	require.Equal(t, int64(7), *repo.tx.rows[0].ModifiedByID)
+	require.Equal(t, 1, logs.calls, "one save dispatches its Changelog and Activity Log rows in one call")
 	require.Equal(t, []ActivityLogEntry{
 		{ActorID: 7, ActorName: "Rina Wulandari", LogTable: LogTableTransactionSettings, Action: actionEdit, Object: "Borrow", ObjectName: "All categories", Field: "Max duration", OldValue: "14 days", NewValue: "25 days"},
 		{ActorID: 7, ActorName: "Rina Wulandari", LogTable: LogTableTransactionSettings, Action: actionEdit, Object: "Borrow", ObjectName: "All categories", Field: "Allowed borrower", OldValue: "Employee in any Group", NewValue: "Same Group only"},
-	}, acts.entries)
+	}, logs.activity)
 	require.Equal(t, ChangeLogEntry{
 		Action: "Edit", Entity: "All categories", ObjectPath: "Transaction Settings", Field: "Borrow (Max duration)",
 		OldValue: "14 days", NewValue: "25 days", ModifiedBy: "Rina Wulandari", CreatedByID: 7, LogTable: LogTableTransactionSettings,
@@ -94,7 +104,7 @@ func TestSave_CompanyDefaultChangeWritesBumpsAndLogs(t *testing.T) {
 
 func TestSave_NoDifferenceIsNoOp(t *testing.T) {
 	repo := &fakeRepo{company: []model.TransactionRuleField{storedRow(nil, "borrow", "max_duration", "21")}}
-	res, err := NewService(repo, nil).WithActivityEntryDispatcher(&fakeActivities{}).SaveTransactionSettings(context.Background(), saveInput(FullPlan,
+	res, err := NewService(repo, nil).SaveTransactionSettings(context.Background(), saveInput(FullPlan,
 		change("", "borrow", sf("max_duration", "own", "21"), sf("max_extensions", "own", "1")),
 		change("", "disposal", sf("allowed_disposal_types", "own", `["write_off","sell","scrap","donate","trade_in"]`))))
 	require.NoError(t, err)
@@ -105,9 +115,9 @@ func TestSave_NoDifferenceIsNoOp(t *testing.T) {
 func TestSave_CategoryInheritToOwnAndOwnToInherit(t *testing.T) {
 	cat := int64(42)
 	repo := &fakeRepo{leaf: []model.TransactionRuleField{storedRow(&cat, "borrow", "max_extensions", "2")}}
-	acts, logs := &fakeActivities{}, &fakeChangeLogs{}
+	logs := &fakeChangeLogs{}
 	dir := &fakeCategories{infos: map[int64]CategoryInfo{42: {Exists: true, Path: "Vehicle > Pool car"}}}
-	svc := NewService(repo, nil).WithActivityEntryDispatcher(acts).WithChangeLogDispatcher(logs).WithCategoryDirectory(dir)
+	svc := NewService(repo, nil).WithChangeLogDispatcher(logs).WithCategoryDirectory(dir)
 	res, err := svc.SaveTransactionSettings(context.Background(), saveInput(FullPlan,
 		change("42", "borrow", sf("max_duration", "own", "7"), sf("max_extensions", "inherit", ""))))
 	require.NoError(t, err)
@@ -306,7 +316,7 @@ func TestSave_AssigneeGuard(t *testing.T) {
 			change("", "assign", sf("allowed_assignee_employee", "own", "false"), sf("max_assets_per_assignee", "own", "2"))))
 		errs := validationErrors(t, err)
 		require.Equal(t, "fields[0].value", errs[0].Field)
-		require.Equal(t, "fields[1].value", errs[1].Field)
+		require.Len(t, errs, 1)
 	})
 	t.Run("deny skips guard", func(t *testing.T) {
 		res, err := NewService(&fakeRepo{}, nil).SaveTransactionSettings(context.Background(), saveInput(FullPlan,
@@ -325,7 +335,32 @@ func TestSave_AssigneeGuard(t *testing.T) {
 		repo := &fakeRepo{company: []model.TransactionRuleField{storedRow(nil, "assign", "allowed_assignee_division", "false")}}
 		_, err := NewService(repo, nil).SaveTransactionSettings(context.Background(), saveInput(FullPlan,
 			change("9", "assign", sf("allowed_assignee_employee", "own", "false"))))
-		require.Len(t, validationErrors(t, err), 2)
+		require.Len(t, validationErrors(t, err), 1)
+	})
+}
+
+func TestSave_OverrideAssigneeGuard(t *testing.T) {
+	t.Run("override row becoming both OFF answers one entry", func(t *testing.T) {
+		repo := &fakeRepo{
+			company:   []model.TransactionRuleField{storedRow(nil, "assign", "allowed_assignee_employee", "true"), storedRow(nil, "assign", "allowed_assignee_division", "true")},
+			overrides: []model.TransactionRuleOverride{{TransactionType: "assign", Scope: "group", TargetID: 7, Fields: json.RawMessage(`{"allowed_assignee_employee": false}`)}},
+		}
+		_, err := NewService(repo, nil).SaveTransactionSettings(context.Background(), saveInput(FullPlan,
+			change("", "assign", sf("allowed_assignee_division", "own", "false"))))
+		errs := validationErrors(t, err)
+		require.Len(t, errs, 1)
+		require.Equal(t, "fields[0].value", errs[0].Field)
+		require.Equal(t, msgNoAssigneeType, errs[0].Message)
+	})
+	t.Run("row already both OFF before the save is not answered", func(t *testing.T) {
+		repo := &fakeRepo{
+			company:   []model.TransactionRuleField{storedRow(nil, "assign", "allowed_assignee_employee", "true"), storedRow(nil, "assign", "allowed_assignee_division", "false")},
+			overrides: []model.TransactionRuleOverride{{TransactionType: "assign", Scope: "group", TargetID: 7, Fields: json.RawMessage(`{"allowed_assignee_employee": false}`)}},
+		}
+		res, err := NewService(repo, nil).SaveTransactionSettings(context.Background(), saveInput(FullPlan,
+			change("", "assign", sf("max_assets_per_assignee", "own", "2"))))
+		require.NoError(t, err)
+		require.True(t, res.Changed)
 	})
 }
 
@@ -390,7 +425,7 @@ func TestSave_StorageFailures(t *testing.T) {
 }
 
 func TestSave_LogDispatchFailuresDoNotFailSave(t *testing.T) {
-	svc := NewService(&fakeRepo{}, nil).WithActivityEntryDispatcher(&fakeActivities{err: errors.New("x")}).WithChangeLogDispatcher(&fakeChangeLogs{err: errors.New("y")})
+	svc := NewService(&fakeRepo{}, nil).WithChangeLogDispatcher(&fakeChangeLogs{err: errors.New("y")})
 	res, err := svc.SaveTransactionSettings(context.Background(), saveInput(FullPlan, change("", "borrow", sf("max_duration", "own", "5"))))
 	require.NoError(t, err)
 	require.True(t, res.Changed)
@@ -467,5 +502,5 @@ func TestSave_GuardReadsStoredLeafValue(t *testing.T) {
 	repo := &fakeRepo{leaf: []model.TransactionRuleField{storedRow(&cat, "assign", "allowed_assignee_employee", "false")}}
 	_, err := NewService(repo, nil).SaveTransactionSettings(context.Background(), saveInput(FullPlan,
 		change("9", "assign", sf("allowed_assignee_division", "own", "false"))))
-	require.Len(t, validationErrors(t, err), 2)
+	require.Len(t, validationErrors(t, err), 1)
 }

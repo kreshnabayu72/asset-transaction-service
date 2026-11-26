@@ -18,6 +18,7 @@ type Providers struct {
 	OverrideTargets OverrideTargetDirectory
 	GroupScope      GroupScopeDirectory
 	DenyContacts    DenyContactResolver
+	Entities        EntityProvider
 }
 
 // NewProviders builds every owner-service provider on the internal clients of the three base URLs.
@@ -28,9 +29,10 @@ func NewProviders(endpoints Endpoints, serviceToken string) Providers {
 	return Providers{
 		Plans:           PlanProvider{ems: ems, iam: iam},
 		Categories:      CategoryDirectory{mar: mar},
-		Assets:          AssetDirectory{mar: mar, ems: ems},
-		OverrideTargets: OverrideTargetDirectory{mar: mar, ems: ems},
-		GroupScope:      GroupScopeDirectory{mar: mar, ems: ems},
+		Assets:          AssetDirectory{mar: mar, iam: iam},
+		OverrideTargets: OverrideTargetDirectory{mar: mar, iam: iam},
+		GroupScope:      GroupScopeDirectory{mar: mar, iam: iam},
 		DenyContacts:    DenyContactResolver{iam: iam},
+		Entities:        EntityProvider{ems: ems},
 	}
 }

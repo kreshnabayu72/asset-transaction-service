@@ -10,6 +10,7 @@ import (
 
 const (
 	pathCategoryLookup  = "/internal/categories/lookup"
+	pathCategoryLeaves  = "/internal/categories/leaves"
 	pathAssetResolve    = "/internal/assets/resolve"
 	pathAssetNameLookup = "/internal/asset-names/lookup"
 )
@@ -36,6 +37,19 @@ func (m marClient) categories(ctx context.Context, clientID string, ids []int64)
 		items = append(items, data.Results...)
 	}
 	return items, nil
+}
+
+// leafCategories lists every live leaf Category of the client.
+func (m marClient) leafCategories(ctx context.Context, clientID string) ([]marhttp.CategoryLookupItem, error) {
+	raw, err := m.client.call(ctx, http.MethodPost, pathCategoryLeaves, clientID, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	var data marhttp.CategoryLookupData
+	if err := decodeData(raw, &data); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", pathCategoryLeaves, err)
+	}
+	return data.Results, nil
 }
 
 // assets resolves Assets for effective rules and override targets, one request per chunk of ids.

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"os"
 
+	coreConfig "gitea.tagsamurai.local/Wangsit-Developer/be-core-utils/config"
 	"github.com/joho/godotenv"
 )
 
@@ -29,6 +30,8 @@ type AppConfig struct {
 	TemporalNamespace string
 	// AnalyticsReportingTaskQueue is the queue that owns RecordChangeLogsWorkflow.
 	AnalyticsReportingTaskQueue string
+	// TemporalTaskQueue is this service worker queue for tenant migration activities.
+	TemporalTaskQueue string
 }
 
 // LoadConfig loads an optional .env file and returns environment-backed settings.
@@ -48,5 +51,11 @@ func LoadConfig() AppConfig {
 		TemporalPort:                cmp.Or(os.Getenv("TEMPORAL_PORT"), "7233"),
 		TemporalNamespace:           cmp.Or(os.Getenv("TEMPORAL_NAMESPACE"), "default"),
 		AnalyticsReportingTaskQueue: cmp.Or(os.Getenv("ANALYTICS_REPORTING_TASK_QUEUE"), "analytics-reporting-service"),
+		TemporalTaskQueue:           cmp.Or(os.Getenv("TEMPORAL_TASK_QUEUE"), "asset-transaction-service"),
 	}
+}
+
+// PostgresDSN returns the connection string shared by PostgreSQL and tenant migration clients.
+func (c AppConfig) PostgresDSN() string {
+	return coreConfig.PostgresDSN(c.PostgresDB)
 }

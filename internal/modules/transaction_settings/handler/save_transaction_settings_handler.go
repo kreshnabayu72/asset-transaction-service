@@ -19,7 +19,6 @@ import (
 const (
 	msgSaved        = "Success, settings have been saved."
 	msgNoChanges    = "No changes to save."
-	msgValidation   = "Validation failed"
 	msgForbidden    = "Forbidden"
 	msgInternal     = "Internal server error"
 	msgUnauthorized = "Unauthorized"
@@ -27,12 +26,17 @@ const (
 
 // validationFailed answers 422 with {field, message} entries from struct-tag violations.
 func validationFailed(c fiber.Ctx, err error) error {
+	return validationFailedWith(c, msgInvalidBody, err)
+}
+
+// validationFailedWith answers 422 with the given message and one error entry per failed rule.
+func validationFailedWith(c fiber.Ctx, message string, err error) error {
 	fields := coreValidator.ParseValidationErrors(err)
 	out := make([]coreValidator.BindFieldError, 0, len(fields))
 	for _, f := range fields {
 		out = append(out, coreValidator.BindFieldError{Field: f.Field, Message: "failed rule " + f.Rule})
 	}
-	return coreEntity.UnprocessableEntity(msgValidation, out).SendResponse(c)
+	return coreEntity.UnprocessableEntity(message, out).SendResponse(c)
 }
 
 // SaveTransactionSettings handles PATCH /v2/asset-transaction/fixed-asset/transaction-settings.
@@ -63,7 +67,7 @@ func (h *Handler) SaveTransactionSettings(c fiber.Ctx) error {
 		for _, e := range invalid.Errors {
 			out = append(out, coreValidator.BindFieldError{Field: e.Field, Message: e.Message})
 		}
-		return coreEntity.UnprocessableEntity(msgValidation, out).SendResponse(c)
+		return coreEntity.UnprocessableEntity(msgInvalidBody, out).SendResponse(c)
 	case errors.Is(err, service.ErrCategoryNotFound):
 		return coreEntity.NotFound("Not found").SendResponse(c)
 	case err != nil:
@@ -89,7 +93,7 @@ func saveValidationFailed(c fiber.Ctx, req dto.SaveSettingsRequest, err error) e
 	for _, v := range violations {
 		out = append(out, coreValidator.BindFieldError{Field: savePath(req, v.Namespace()), Message: "failed rule " + v.Tag()})
 	}
-	return coreEntity.UnprocessableEntity(msgValidation, out).SendResponse(c)
+	return coreEntity.UnprocessableEntity(msgInvalidBody, out).SendResponse(c)
 }
 
 func savePath(req dto.SaveSettingsRequest, namespace string) string {

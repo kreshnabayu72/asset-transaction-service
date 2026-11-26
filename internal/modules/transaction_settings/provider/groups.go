@@ -10,7 +10,7 @@ import (
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings/service"
 )
 
-// groupTree is the Group tree of the caller's entity as enterprise-management lists it. The zero value is an
+// groupTree is the Group tree of the caller's entity as iam-service lists it. The zero value is an
 // empty tree: every lookup misses.
 type groupTree struct {
 	items map[int64]emshttp.GroupItem
@@ -24,9 +24,9 @@ func newGroupTree(list []emshttp.GroupItem) groupTree {
 	return groupTree{items: items}
 }
 
-// loadGroups reads the Group tree of the caller's entity.
-func loadGroups(ctx context.Context, ems emsClient, clientID string) (groupTree, error) {
-	list, err := ems.groups(ctx, clientID)
+// loadGroups reads the fixed-asset Group tree of the caller's entity from iam-service.
+func loadGroups(ctx context.Context, iam iamClient, clientID string) (groupTree, error) {
+	list, err := iam.groups(ctx, clientID)
 	if err != nil {
 		return groupTree{}, fmt.Errorf("read groups: %w", err)
 	}
@@ -39,7 +39,7 @@ func (t groupTree) has(id int64) bool {
 	return ok
 }
 
-// fullPath is the Group path as enterprise-management writes it ("Parent > Child").
+// fullPath is the Group path as iam-service writes it ("Parent > Child").
 func (t groupTree) fullPath(id int64) string {
 	return t.items[id].FullPath
 }

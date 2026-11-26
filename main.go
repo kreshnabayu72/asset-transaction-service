@@ -15,6 +15,13 @@ import (
 func main() {
 	serviceApp := app.New(config.LoadConfig())
 
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	workerErr := make(chan error, 1)
+	go func() {
+		workerErr <- serviceApp.RunWorker(workerCtx)
+	}()
+
 	serverErr := make(chan error, 1)
 	go func() {
 		serverErr <- serviceApp.Run()
@@ -26,7 +33,13 @@ func main() {
 	select {
 	case err := <-serverErr:
 		log.Fatalf("server error: %v", err)
+	case err := <-workerErr:
+		if err != nil {
+			log.Fatalf("worker error: %v", err)
+		}
+		log.Fatalf("temporal worker stopped unexpectedly")
 	case <-signals:
+		workerCancel()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 

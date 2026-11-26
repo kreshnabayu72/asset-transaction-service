@@ -328,6 +328,9 @@ func pick(def constants.FieldDef, tx string, a AssetContext, applying []appliedO
 // gatedValue applies the plan's effective values (LLD step 4); a field gated for any other reason
 // (Feature Suite None, inactive addon) keeps its stored value.
 func gatedValue(in EffectiveInput, def constants.FieldDef, value any, gated bool, level string, hoursUnit bool) any {
+	if def.Key == constants.FieldAllowedDisposalTypes {
+		value = inCatalogueOrder(value, constants.DisposalTypes)
+	}
 	if level == constants.LevelBasic && in.Transaction == constants.TransactionBorrow && hoursUnit &&
 		(def.Key == constants.FieldMaxDuration || def.Key == constants.FieldAutoApproveMaxDuration) {
 		if n, ok := value.(int); ok {
@@ -351,10 +354,40 @@ func gatedValue(in EffectiveInput, def constants.FieldDef, value any, gated bool
 		return true
 	case constants.FieldAllowedAssigneeDivision:
 		return false
+	case constants.FieldDirectHandoverBetweenHolders:
+		return false
 	case constants.FieldApprovalScope:
 		if plan.ApprovalWorkflowAvailable && level == constants.LevelBasic {
 			return constants.ValueOriginOnly
 		}
 	}
 	return value
+}
+
+// inCatalogueOrder returns a stored choice list in the catalogue's option order.
+func inCatalogueOrder(value any, order []string) any {
+	var tokens []string
+	switch v := value.(type) {
+	case []string:
+		tokens = v
+	case []any:
+		for _, item := range v {
+			token, ok := item.(string)
+			if !ok {
+				return value
+			}
+			tokens = append(tokens, token)
+		}
+	default:
+		return value
+	}
+	out := make([]string, 0, len(tokens))
+	for _, token := range order {
+		for _, stored := range tokens {
+			if stored == token {
+				out = append(out, stored)
+			}
+		}
+	}
+	return out
 }

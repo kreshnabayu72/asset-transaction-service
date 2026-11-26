@@ -12,12 +12,6 @@ import (
 
 func TestEMSReadsDecodeTheirData(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET "+pathGroups, func(w http.ResponseWriter, r *http.Request) {
-		if !authorized(w, r) {
-			return
-		}
-		envelope(w, []emshttp.GroupItem{{ID: 1, FullPath: "Root"}})
-	})
 	mux.HandleFunc("GET "+pathSubscriptions, func(w http.ResponseWriter, r *http.Request) {
 		if !authorized(w, r) {
 			return
@@ -36,10 +30,6 @@ func TestEMSReadsDecodeTheirData(t *testing.T) {
 	})
 	ems := emsClient{client: testClient(serve(t, mux))}
 
-	groups, err := ems.groups(context.Background(), testClientID)
-	require.NoError(t, err)
-	require.Equal(t, "Root", groups[0].FullPath)
-
 	subs, err := ems.subscriptions(context.Background(), testClientID)
 	require.NoError(t, err)
 	require.Equal(t, "active", subs[0].Status)
@@ -52,7 +42,7 @@ func TestEMSReadsDecodeTheirData(t *testing.T) {
 func TestEMSReadsSurfaceFailures(t *testing.T) {
 	statusMux := http.NewServeMux()
 	noDataMux := http.NewServeMux()
-	for _, path := range []string{pathGroups, pathSubscriptions, pathEffectiveCapacities} {
+	for _, path := range []string{pathSubscriptions, pathEffectiveCapacities} {
 		statusMux.HandleFunc("GET "+path, func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "down", http.StatusInternalServerError)
 		})
@@ -61,16 +51,12 @@ func TestEMSReadsSurfaceFailures(t *testing.T) {
 		})
 	}
 	down := emsClient{client: testClient(serve(t, statusMux))}
-	_, err := down.groups(context.Background(), testClientID)
-	require.ErrorContains(t, err, "HTTP 500")
-	_, err = down.subscriptions(context.Background(), testClientID)
+	_, err := down.subscriptions(context.Background(), testClientID)
 	require.ErrorContains(t, err, "HTTP 500")
 	_, err = down.effectiveCapacities(context.Background(), testClientID)
 	require.ErrorContains(t, err, "HTTP 500")
 
 	empty := emsClient{client: testClient(serve(t, noDataMux))}
-	_, err = empty.groups(context.Background(), testClientID)
-	require.ErrorIs(t, err, errMissingData)
 	_, err = empty.subscriptions(context.Background(), testClientID)
 	require.ErrorIs(t, err, errMissingData)
 	_, err = empty.effectiveCapacities(context.Background(), testClientID)

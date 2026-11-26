@@ -50,12 +50,12 @@ func TestGroupTreeExpandReturnsDescendantsSorted(t *testing.T) {
 
 func TestLoadGroupsReadsTheTreeAndSurfacesFailure(t *testing.T) {
 	o := &owners{groups: []emshttp.GroupItem{{ID: 1, FullPath: "Root"}}}
-	_, ems, _ := o.clients(t)
-	tree, err := loadGroups(context.Background(), ems, testClientID)
+	_, _, iam := o.clients(t)
+	tree, err := loadGroups(context.Background(), iam, testClientID)
 	require.NoError(t, err)
 	require.True(t, tree.has(1))
 
-	o.failEMS = true
-	_, err = loadGroups(context.Background(), ems, testClientID)
+	o.failIAM = true
+	_, err = loadGroups(context.Background(), iam, testClientID)
 	require.ErrorContains(t, err, "read groups")
 }

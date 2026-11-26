@@ -10,10 +10,10 @@ import (
 )
 
 // AssetDirectory resolves the assets of effective rules: master-asset-registry gives the asset, its Asset Name
-// and Category, enterprise-management the Group chain of the asset's Group.
+// and Category, iam-service the Group chain of the asset's Group.
 type AssetDirectory struct {
 	mar marClient
-	ems emsClient
+	iam iamClient
 }
 
 // ResolveAssets answers the assets in request order. A deleted, disposed, unknown or foreign asset fails the
@@ -38,7 +38,7 @@ func (d AssetDirectory) ResolveAssets(ctx context.Context, clientID string, ids 
 	if len(found) == 0 {
 		return nil, nil
 	}
-	tree, err := loadGroups(ctx, d.ems, clientID)
+	tree, err := loadGroups(ctx, d.iam, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve assets: %w", err)
 	}

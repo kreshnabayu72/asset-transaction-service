@@ -22,6 +22,9 @@ func (h *Handler) ExportTransactionSettings(c fiber.Ctx) error {
 		return coreEntity.BadRequest(msgInvalidBody).SendResponse(c)
 	}
 	categoryID, err := parseCategoryID(req.CategoryID)
+	if errors.Is(err, errCategoryIDOutOfRange) {
+		return coreEntity.NotFound("Not found").SendResponse(c)
+	}
 	if err != nil {
 		return coreEntity.BadRequest(msgInvalidBody).SendResponse(c)
 	}
