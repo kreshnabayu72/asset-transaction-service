@@ -3,6 +3,7 @@ package config
 import (
 	"cmp"
 	"os"
+	"strconv"
 
 	coreConfig "gitea.tagsamurai.local/Wangsit-Developer/be-core-utils/config"
 	"github.com/joho/godotenv"
@@ -20,11 +21,13 @@ type AppConfig struct {
 	KafkaBrokers string
 	// IAMBaseURL is iam's internal address; the RBAC middleware asks it for the caller's roles.
 	IAMBaseURL string
-	// EnterpriseManagementBaseURL is the internal EMS address for subscription, capacity and group reads.
+	// EnterpriseManagementBaseURL is the internal EMS address for category and brand reads.
 	EnterpriseManagementBaseURL string
 	// MasterAssetRegistryBaseURL is master-asset-registry's internal address for the category, asset and asset-name lookups.
 	MasterAssetRegistryBaseURL string
-	// TemporalHost and TemporalPort identify Temporal for post-commit change-log workflows.
+	// ServiceCenterSnowflakeNodeID is deployment-unique; nil leaves ID-generating writes fail-closed.
+	ServiceCenterSnowflakeNodeID *int64
+	// TemporalHost and TemporalPort identify Temporal for post-commit service workflows.
 	TemporalHost      string
 	TemporalPort      string
 	TemporalNamespace string
@@ -38,20 +41,26 @@ type AppConfig struct {
 func LoadConfig() AppConfig {
 	_ = godotenv.Load()
 
+	var serviceCenterSnowflakeNodeID *int64
+	if nodeID, err := strconv.ParseInt(os.Getenv("SERVICE_CENTER_SNOWFLAKE_NODE_ID"), 10, 64); err == nil {
+		serviceCenterSnowflakeNodeID = &nodeID
+	}
+
 	return AppConfig{
-		Port:                        cmp.Or(os.Getenv("PORT"), "5013"),
-		ServiceName:                 cmp.Or(os.Getenv("SERVICE_NAME"), "asset-transaction-service"),
-		ServiceToken:                os.Getenv("SERVICE_TOKEN"),
-		PostgresDB:                  cmp.Or(os.Getenv("POSTGRES_DB"), "tagsamurai_asset_transaction"),
-		KafkaBrokers:                cmp.Or(os.Getenv("KAFKA_BROKERS"), "localhost:9092"),
-		IAMBaseURL:                  os.Getenv("IAM_BASE_URL"),
-		EnterpriseManagementBaseURL: cmp.Or(os.Getenv("ENTERPRISE_MANAGEMENT_BASE_URL"), "http://localhost:8090"),
-		MasterAssetRegistryBaseURL:  os.Getenv("MASTER_ASSET_REGISTRY_BASE_URL"),
-		TemporalHost:                os.Getenv("TEMPORAL_HOST"),
-		TemporalPort:                cmp.Or(os.Getenv("TEMPORAL_PORT"), "7233"),
-		TemporalNamespace:           cmp.Or(os.Getenv("TEMPORAL_NAMESPACE"), "default"),
-		AnalyticsReportingTaskQueue: cmp.Or(os.Getenv("ANALYTICS_REPORTING_TASK_QUEUE"), "analytics-reporting-service"),
-		TemporalTaskQueue:           cmp.Or(os.Getenv("TEMPORAL_TASK_QUEUE"), "asset-transaction-service"),
+		Port:                         cmp.Or(os.Getenv("PORT"), "5013"),
+		ServiceName:                  cmp.Or(os.Getenv("SERVICE_NAME"), "asset-transaction-service"),
+		ServiceToken:                 os.Getenv("SERVICE_TOKEN"),
+		PostgresDB:                   cmp.Or(os.Getenv("POSTGRES_DB"), "tagsamurai_asset_transaction"),
+		KafkaBrokers:                 cmp.Or(os.Getenv("KAFKA_BROKERS"), "localhost:9092"),
+		IAMBaseURL:                   os.Getenv("IAM_BASE_URL"),
+		EnterpriseManagementBaseURL:  cmp.Or(os.Getenv("ENTERPRISE_MANAGEMENT_BASE_URL"), "http://localhost:8090"),
+		MasterAssetRegistryBaseURL:   os.Getenv("MASTER_ASSET_REGISTRY_BASE_URL"),
+		ServiceCenterSnowflakeNodeID: serviceCenterSnowflakeNodeID,
+		TemporalHost:                 os.Getenv("TEMPORAL_HOST"),
+		TemporalPort:                 cmp.Or(os.Getenv("TEMPORAL_PORT"), "7233"),
+		TemporalNamespace:            cmp.Or(os.Getenv("TEMPORAL_NAMESPACE"), "default"),
+		AnalyticsReportingTaskQueue:  cmp.Or(os.Getenv("ANALYTICS_REPORTING_TASK_QUEUE"), "analytics-reporting-service"),
+		TemporalTaskQueue:            cmp.Or(os.Getenv("TEMPORAL_TASK_QUEUE"), "asset-transaction-service"),
 	}
 }
 
