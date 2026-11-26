@@ -21,7 +21,6 @@ func (r *TransactionSettingsRepository) FindNodeFields(ctx context.Context, clie
 		return nil, fmt.Errorf("build node fields query: %w", err)
 	}
 	svc := r.open(clientID)
-	defer svc.Close()
 
 	var rows []model.TransactionRuleField
 	if err := svc.SelectMany(&rows, ctx, query, args...); err != nil {
@@ -37,7 +36,6 @@ func (r *TransactionSettingsRepository) FindSettingsVersion(ctx context.Context,
 		return 0, fmt.Errorf("build settings version query: %w", err)
 	}
 	svc := r.open(clientID)
-	defer svc.Close()
 
 	var row query_builder.SettingsVersionRow
 	if err := svc.SelectOne(&row, ctx, query, args...); err != nil {

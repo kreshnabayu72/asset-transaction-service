@@ -27,7 +27,7 @@ func routesApp(roles middleware.UserAccessCache) *fiber.App {
 
 func call(t *testing.T, app *fiber.App, method, path string) int {
 	t.Helper()
-	req := httptest.NewRequest(method, "/v2/asset-transaction/fixed-asset/transaction-settings"+path, strings.NewReader("{"))
+	req := httptest.NewRequest(method, "/fixed-asset/transaction-settings"+path, strings.NewReader("{"))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(constant.HEADER_CLIENT_ID, "c1")
 	req.Header.Set(constant.HEADER_USER_ID, "7")

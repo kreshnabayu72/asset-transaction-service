@@ -68,7 +68,11 @@ func (s *Service) SaveTransactionSettings(ctx context.Context, in SaveInput) (Sa
 		return SaveResult{}, err
 	}
 	cands = st.admit(cands, &errs)
-	guardAssignees(st, cands, in.Plan, &errs)
+	overrides, err := s.assignOverrideRows(ctx, in.ClientID, st, cands, in.Plan)
+	if err != nil {
+		return SaveResult{}, err
+	}
+	guardAssignees(st, cands, overrides, in.Plan, &errs)
 	if len(errs) > 0 {
 		return SaveResult{}, &ValidationError{Errors: errs}
 	}
@@ -317,9 +321,15 @@ func (st *saveState) admit(cands []candidate, errs *[]dto.FieldError) []candidat
 // OFF while Allow Assign is not Deny (not evaluated at Assignment Basic, where Employee is
 // effectively ON). Existing overrides are not re-checked here (overrides storage format is owned
 // by the overrides operations).
-func guardAssignees(st *saveState, cands []candidate, plan Plan, errs *[]dto.FieldError) {
+func guardAssignees(st *saveState, cands []candidate, overrides []model.TransactionRuleOverride, plan Plan, errs *[]dto.FieldError) {
 	if transactionLevel(constants.TransactionAssign, plan) != constants.LevelFull {
 		return
+	}
+	lastField := 0
+	for _, c := range cands {
+		if c.idx > lastField {
+			lastField = c.idx
+		}
 	}
 	seen := map[string]bool{}
 	for _, c := range cands {
@@ -334,20 +344,131 @@ func guardAssignees(st *saveState, cands []candidate, plan Plan, errs *[]dto.Fie
 		if st.effective(c.cat, c.tx, allow) == false || st.effective(c.cat, c.tx, emp) != false || st.effective(c.cat, c.tx, div) != false {
 			continue
 		}
-		last := c.idx
-		for _, o := range cands {
-			if o.tx == c.tx && sameNode(o.cat, c.cat) && o.idx > last {
-				last = o.idx
+		var at []int
+		for _, key := range []string{constants.FieldAllowedAssigneeEmployee, constants.FieldAllowedAssigneeDivision} {
+			if p, ok := st.pending[id][indexKey(c.tx, key)]; ok {
+				at = append(at, p.idx)
 			}
 		}
-		for _, key := range []string{constants.FieldAllowedAssigneeEmployee, constants.FieldAllowedAssigneeDivision} {
-			at := last
-			if p, ok := st.pending[id][indexKey(c.tx, key)]; ok {
-				at = p.idx
-			}
-			*errs = append(*errs, fieldError(at, "value", msgNoAssigneeType))
+		if len(at) == 0 {
+			at = []int{lastField}
+		}
+		for _, i := range at {
+			*errs = append(*errs, fieldError(i, "value", msgNoAssigneeType))
 		}
 	}
+	guardOverrides(st, cands, overrides, errs)
+}
+
+func isAllowedAssigneeKey(key string) bool {
+	return key == constants.FieldAllowedAssigneeEmployee || key == constants.FieldAllowedAssigneeDivision
+}
+
+// assignOverrideRows reads the Assign override rows the Allowed assignee guard answers for (LLD PATCH step 3) when the
+// Save has an Assign field at the Full level, and the stored fields of each Category a row sits on.
+func (s *Service) assignOverrideRows(ctx context.Context, clientID string, st *saveState, cands []candidate, plan Plan) ([]model.TransactionRuleOverride, error) {
+	if transactionLevel(constants.TransactionAssign, plan) != constants.LevelFull {
+		return nil, nil
+	}
+	hasAssign := false
+	for _, c := range cands {
+		hasAssign = hasAssign || c.tx == constants.TransactionAssign
+	}
+	if !hasAssign {
+		return nil, nil
+	}
+	all, err := s.repo.FindExportOverrides(ctx, clientID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("read override rows: %w", err)
+	}
+	var out []model.TransactionRuleOverride
+	for _, o := range all {
+		if o.TransactionType != constants.TransactionAssign {
+			continue
+		}
+		out = append(out, o)
+		id := nodeID(o.CategoryID)
+		if _, ok := st.stored[id]; ok {
+			continue
+		}
+		rows, err := s.repo.FindNodeFields(ctx, clientID, o.CategoryID)
+		if err != nil {
+			return nil, fmt.Errorf("read stored fields: %w", err)
+		}
+		st.stored[id] = newFieldIndex(rows)
+	}
+	return out, nil
+}
+
+// guardOverrides answers one entry per existing Assign override row whose effective Allowed assignee: Employee and
+// Division both become OFF through the Save while its Allow Assign is not Deny. A row already both OFF before the Save
+// is not answered. A row reads its own fields, then on a Category the All categories row of the same target, then the
+// Category and the Company default.
+func guardOverrides(st *saveState, cands []candidate, rows []model.TransactionRuleOverride, errs *[]dto.FieldError) {
+	type targetKey struct {
+		scope string
+		id    int64
+	}
+	byTarget := map[targetKey][]model.TransactionRuleOverride{}
+	for _, o := range rows {
+		k := targetKey{o.Scope, o.TargetID}
+		byTarget[k] = append(byTarget[k], o)
+	}
+	before := &saveState{stored: st.stored, pending: map[string]map[string]candidate{}}
+	for _, o := range rows {
+		layers := []map[string]any{decodeOverrideFields(o.Fields)}
+		if o.CategoryID != nil {
+			for _, shared := range byTarget[targetKey{o.Scope, o.TargetID}] {
+				if shared.ID != o.ID && shared.CategoryID == nil {
+					layers = append(layers, decodeOverrideFields(shared.Fields))
+				}
+			}
+		}
+		denyAfter, bothAfter := st.overrideAssignState(layers, o.CategoryID)
+		_, bothBefore := before.overrideAssignState(layers, o.CategoryID)
+		if denyAfter || !bothAfter || bothBefore {
+			continue
+		}
+		*errs = append(*errs, fieldError(overrideGuardIndex(cands, o.CategoryID), "value", msgNoAssigneeType))
+	}
+}
+
+// overrideAssignState reads Allow Assign and both Allowed assignee values of an Assign override row: a layer value
+// wins, otherwise the effective value of the Category (nil = Company default) in this state.
+func (st *saveState) overrideAssignState(layers []map[string]any, cat *int64) (deny, bothOff bool) {
+	tx := constants.TransactionAssign
+	get := func(key string) any {
+		for _, layer := range layers {
+			if v, ok := layer[key]; ok {
+				return v
+			}
+		}
+		def, _ := findDef(tx, key)
+		return st.effective(cat, tx, def)
+	}
+	return get(constants.FieldAllowAssign) == false,
+		get(constants.FieldAllowedAssigneeEmployee) == false && get(constants.FieldAllowedAssigneeDivision) == false
+}
+
+// overrideGuardIndex is the request index an offending override row is answered at: the last Allowed assignee field
+// the Save changes on its Category or on the Company default, else the last Assign field of the Save.
+func overrideGuardIndex(cands []candidate, cat *int64) int {
+	at, last := -1, -1
+	for _, c := range cands {
+		if c.tx != constants.TransactionAssign {
+			continue
+		}
+		if c.idx > last {
+			last = c.idx
+		}
+		if isAllowedAssigneeKey(c.def.Key) && (c.cat == nil || sameNode(c.cat, cat)) && c.idx > at {
+			at = c.idx
+		}
+	}
+	if at < 0 {
+		return last
+	}
+	return at
 }
 
 // stored returns the mode and value stored for a field; an unstored Company field reads as its own
@@ -458,13 +579,8 @@ func (s *Service) dispatchLogs(ctx context.Context, in SaveInput, st *saveState,
 		})
 	}
 	if s.changeLogs != nil {
-		if err := s.changeLogs.DispatchChangeLogs(logCtx, in.ClientID, entries); err != nil {
-			log.Printf("transaction settings changelog dispatch failed: %v", err)
-		}
-	}
-	if s.activityEntries != nil {
-		if err := s.activityEntries.DispatchActivityEntries(logCtx, in.ClientID, activity); err != nil {
-			log.Printf("transaction settings activity log dispatch failed: %v", err)
+		if err := s.changeLogs.DispatchLogs(logCtx, in.ClientID, entries, activity); err != nil {
+			log.Printf("transaction settings log dispatch failed: %v", err)
 		}
 	}
 }

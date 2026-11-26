@@ -60,9 +60,8 @@ func TestAssetDirectoryResolvesInRequestOrderWithGroupChains(t *testing.T) {
 			{ID: 2, FullPath: "Root > Child", ParentID: ptr(int64(1))},
 		},
 	}
-	_, ems, _ := o.clients(t)
-	mar, _, _ := o.clients(t)
-	dir := AssetDirectory{mar: mar, ems: ems}
+	mar, _, iam := o.clients(t)
+	dir := AssetDirectory{mar: mar, iam: iam}
 
 	out, err := dir.ResolveAssets(context.Background(), testClientID, []int64{11, 10})
 	require.NoError(t, err)
@@ -87,10 +86,10 @@ func TestAssetDirectoryResolvesInRequestOrderWithGroupChains(t *testing.T) {
 	require.ErrorContains(t, err, "resolve assets")
 	o.failMAR = false
 
-	o.failEMS = true
+	o.failIAM = true
 	_, err = dir.ResolveAssets(context.Background(), testClientID, []int64{10})
 	require.ErrorContains(t, err, "read groups")
-	o.failEMS = false
+	o.failIAM = false
 
 	for _, bad := range []marhttp.AssetResolveItem{
 		{ID: "10", Found: true, AssetNameID: ptr("x")},
@@ -122,8 +121,8 @@ func TestOverrideTargetsForEachScope(t *testing.T) {
 			{ID: "11", Found: true, DisplayName: ptr("Chair")},
 		},
 	}
-	mar, ems, _ := o.clients(t)
-	dir := OverrideTargetDirectory{mar: mar, ems: ems}
+	mar, _, iam := o.clients(t)
+	dir := OverrideTargetDirectory{mar: mar, iam: iam}
 	ctx := context.Background()
 
 	groups, err := dir.ResolveTargets(ctx, testClientID, constants.ScopeGroup, []int64{2, 9})
@@ -148,12 +147,12 @@ func TestOverrideTargetsForEachScope(t *testing.T) {
 	_, err = dir.ResolveTargets(ctx, testClientID, "unknown", []int64{1})
 	require.ErrorIs(t, err, errUnknownScope)
 
-	o.failEMS = true
+	o.failIAM = true
 	_, err = dir.ResolveTargets(ctx, testClientID, constants.ScopeGroup, []int64{1})
 	require.ErrorContains(t, err, "read groups")
 	_, err = dir.ResolveTargets(ctx, testClientID, constants.ScopeAsset, []int64{10})
 	require.ErrorContains(t, err, "read groups")
-	o.failEMS = false
+	o.failIAM = false
 
 	o.failMAR = true
 	_, err = dir.ResolveTargets(ctx, testClientID, constants.ScopeAssetName, []int64{4})
@@ -176,8 +175,8 @@ func TestOverrideTargetsForEachScope(t *testing.T) {
 
 func TestAssetTargetsSkipTheGroupReadWithoutAssets(t *testing.T) {
 	o := &owners{}
-	mar, ems, _ := o.clients(t)
-	dir := OverrideTargetDirectory{mar: mar, ems: ems}
+	mar, _, iam := o.clients(t)
+	dir := OverrideTargetDirectory{mar: mar, iam: iam}
 	_, err := dir.ResolveTargets(context.Background(), testClientID, constants.ScopeAsset, []int64{10})
 	require.NoError(t, err)
 	require.Zero(t, o.groupCalls.Load())
@@ -196,8 +195,8 @@ func TestGroupScopeExpandsAndReadsCurrentGroups(t *testing.T) {
 			{ID: "12", Found: false, GroupID: ptr("3")},
 		},
 	}
-	mar, ems, _ := o.clients(t)
-	dir := GroupScopeDirectory{mar: mar, ems: ems}
+	mar, _, iam := o.clients(t)
+	dir := GroupScopeDirectory{mar: mar, iam: iam}
 	ctx := context.Background()
 
 	expanded, err := dir.ExpandGroups(ctx, testClientID, []int64{2})
@@ -212,10 +211,10 @@ func TestGroupScopeExpandsAndReadsCurrentGroups(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[int64]int64{10: 2}, groups)
 
-	o.failEMS = true
+	o.failIAM = true
 	_, err = dir.ExpandGroups(ctx, testClientID, []int64{2})
 	require.ErrorContains(t, err, "read groups")
-	o.failEMS = false
+	o.failIAM = false
 
 	o.failMAR = true
 	_, err = dir.CurrentAssetGroups(ctx, testClientID, []int64{10})

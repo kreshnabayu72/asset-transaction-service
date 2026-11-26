@@ -43,10 +43,30 @@ func TestParseCategoryID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1924881519926425600), *id)
 
-	for _, bad := range []string{"abc", "-1", "0", "99999999999999999999", "1a"} {
+	for _, bad := range []string{"abc", "-1", "0", "1a"} {
 		_, err = parseCategoryID(strPtr(bad))
 		require.ErrorIs(t, err, errMalformedCategoryID, bad)
 	}
+	_, err = parseCategoryID(strPtr("99999999999999999999"))
+	require.ErrorIs(t, err, errCategoryIDOutOfRange)
+}
+
+func TestEntityType(t *testing.T) {
+	h := NewHandler(nil, nil).WithEntity(func(context.Context, string) (string, error) { return "principal", nil })
+	entityType, err := h.EntityType(context.Background(), "CLT_1")
+	require.NoError(t, err)
+	require.Equal(t, "principal", entityType)
+	_, err = NewHandler(nil, nil).EntityType(context.Background(), "CLT_1")
+	require.Error(t, err)
+}
+
+func TestClientStatus(t *testing.T) {
+	h := NewHandler(nil, nil).WithClientStatus(func(context.Context, string) (string, error) { return "Suspended", nil })
+	status, err := h.ClientStatus(context.Background(), "CLT_1")
+	require.NoError(t, err)
+	require.Equal(t, "Suspended", status)
+	_, err = NewHandler(nil, nil).ClientStatus(context.Background(), "CLT_1")
+	require.Error(t, err)
 }
 
 func TestPlanFromProvider(t *testing.T) {

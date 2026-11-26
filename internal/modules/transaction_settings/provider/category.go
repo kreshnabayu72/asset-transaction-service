@@ -31,3 +31,20 @@ func (d CategoryDirectory) LookupCategory(ctx context.Context, clientID string, 
 	}
 	return service.CategoryInfo{Exists: true, Path: derefString(item.FullPath), Leaf: derefBool(item.IsLeaf)}, nil
 }
+
+// ListLeafCategories lists every live leaf Category of the client with its full path.
+func (d CategoryDirectory) ListLeafCategories(ctx context.Context, clientID string) ([]service.LeafCategory, error) {
+	items, err := d.mar.leafCategories(ctx, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("list leaf categories: %w", err)
+	}
+	out := make([]service.LeafCategory, 0, len(items))
+	for _, item := range items {
+		id, err := parseID(item.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list leaf categories: %w", err)
+		}
+		out = append(out, service.LeafCategory{ID: id, Path: derefString(item.FullPath)})
+	}
+	return out, nil
+}

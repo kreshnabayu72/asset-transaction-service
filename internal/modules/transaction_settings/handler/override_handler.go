@@ -35,7 +35,7 @@ func overrideFailure(c fiber.Ctx, err error, internalMsg string) error {
 		for _, e := range invalid.Errors {
 			out = append(out, coreValidator.BindFieldError{Field: e.Field, Message: e.Message})
 		}
-		return coreEntity.UnprocessableEntity(msgValidation, out).SendResponse(c)
+		return coreEntity.UnprocessableEntity(msgInvalidBody, out).SendResponse(c)
 	case errors.Is(err, service.ErrOverrideForbidden):
 		return coreEntity.Forbidden(msgForbidden).SendResponse(c)
 	case errors.Is(err, service.ErrCategoryNotFound), errors.Is(err, service.ErrTargetNotFound):

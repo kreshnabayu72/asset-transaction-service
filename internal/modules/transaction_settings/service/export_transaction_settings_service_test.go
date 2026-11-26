@@ -168,17 +168,18 @@ func TestExportTransactionSettings_StoredRowsAndOverrides(t *testing.T) {
 	plan := FullPlan
 	plan.FeatureSuite.Disposal = constants.LevelNone
 	renderer := &fakeRenderer{}
-	_, err := NewService(repo, renderer).ExportTransactionSettings(context.Background(), exportInput(nil, plan))
+	dir := &fakeCategories{infos: map[int64]CategoryInfo{42: {Exists: true, Leaf: true, Path: path}}, leaves: []LeafCategory{{ID: 42, Path: path}}}
+	_, err := NewService(repo, renderer).WithCategoryDirectory(dir).ExportTransactionSettings(context.Background(), exportInput(nil, plan))
 	require.NoError(t, err)
 
 	rules, overrides, info := renderer.sheets[0], renderer.sheets[1], renderer.sheets[2]
-	require.Contains(t, rules.Rows, []any{constants.NodeAllCategories, "borrow", constants.FieldMaxDuration, 30, "days", constants.CompanyDefaultSource})
-	require.Contains(t, rules.Rows, []any{"42", "borrow", constants.FieldMaxDuration, 21, "days", "42"})
-	require.Contains(t, rules.Rows, []any{"42", "borrow", constants.FieldMaxExtensions, 1, "-", constants.CompanyDefaultSource})
+	require.Contains(t, rules.Rows, []any{constants.NodeAllCategories, "Borrow", "Max duration", 30, "days", constants.CompanyDefaultSource})
+	require.Contains(t, rules.Rows, []any{path, "Borrow", "Max duration", 21, "days", path})
+	require.Contains(t, rules.Rows, []any{path, "Borrow", "Max extensions", 1, "-", constants.CompanyDefaultSource})
 	require.Equal(t, [][]any{
-		{"Group", "Finance", path, "borrow", "auto_approve", "Inactive", "-", "Applied", "Rina", "2026-11-01 08:00:00"},
-		{"Group", "Finance", path, "borrow", "max_duration", 5, "days", "Applied", "Rina", "2026-11-01 08:00:00"},
-		{"Asset", "Laptop 1", constants.NodeAllCategories, "transfer", "in_transit_overdue_after", 3, "days", "Applied", "Budi", "2026-11-01 08:00:00"},
+		{"Group", "Finance", path, "Borrow", "Max duration", 5, "days", "Applied", "Rina", "2026-11-01 08:00:00"},
+		{"Group", "Finance", path, "Borrow", "Auto-approve", "Inactive", "-", "Applied", "Rina", "2026-11-01 08:00:00"},
+		{"Asset", "Laptop 1", constants.NodeAllCategories, "Transfer", "In-transit overdue after", 3, "days", "Applied", "Budi", "2026-11-01 08:00:00"},
 	}, overrides.Rows)
 	require.Equal(t, []any{"Settings version", int64(9)}, info.Rows[3])
 }
@@ -192,8 +193,27 @@ func TestExportTransactionSettings_LeafRulesListOnlyTheLeaf(t *testing.T) {
 	renderer := &fakeRenderer{}
 	_, err := NewService(repo, renderer).ExportTransactionSettings(context.Background(), exportInput(&catID, FullPlan))
 	require.NoError(t, err)
-	require.Contains(t, renderer.sheets[0].Rows, []any{"42", "borrow", constants.FieldMaxExtensions, 0, "-", "42"})
-	require.Contains(t, renderer.sheets[0].Rows, []any{"42", "borrow", constants.FieldMaxDuration, 30, "days", constants.CompanyDefaultSource})
+	require.Contains(t, renderer.sheets[0].Rows, []any{"42", "Borrow", "Max extensions", 0, "-", "42"})
+	require.Contains(t, renderer.sheets[0].Rows, []any{"42", "Borrow", "Max duration", 30, "days", constants.CompanyDefaultSource})
+}
+
+func TestExportTransactionSettings_AllCategoriesListEveryLeaf(t *testing.T) {
+	pool, truck, parent := int64(42), int64(43), int64(44)
+	repo := &fakeRepo{export: []model.TransactionRuleField{
+		ownRow("borrow", constants.FieldMaxDuration, "30"),
+		{CategoryID: &pool, TransactionType: "borrow", FieldKey: constants.FieldMaxDuration, Mode: constants.ModeOwn, Value: raw("21")},
+		{CategoryID: &parent, TransactionType: "borrow", FieldKey: constants.FieldMaxDuration, Mode: constants.ModeOwn, Value: raw("7")},
+	}}
+	dir := &fakeCategories{leaves: []LeafCategory{{ID: pool, Path: "Vehicle / Pool car"}, {ID: truck, Path: "Vehicle / Truck"}}}
+	renderer := &fakeRenderer{}
+	_, err := NewService(repo, renderer).WithCategoryDirectory(dir).ExportTransactionSettings(context.Background(), exportInput(nil, FullPlan))
+	require.NoError(t, err)
+	rules := renderer.sheets[0].Rows
+	require.Contains(t, rules, []any{"Vehicle / Pool car", "Borrow", "Max duration", 21, "days", "Vehicle / Pool car"})
+	require.Contains(t, rules, []any{"Vehicle / Truck", "Borrow", "Max duration", 30, "days", constants.CompanyDefaultSource})
+	for _, row := range rules {
+		require.NotEqual(t, "44", row[0], "a parent Category's stored values leave Rules")
+	}
 }
 
 func TestExportTransactionSettings_RepositoryErrors(t *testing.T) {
@@ -309,6 +329,6 @@ func TestOverrideHelpers(t *testing.T) {
 	require.Equal(t, "", fieldDef("borrow", "unknown").Unit)
 	require.Equal(t, "hours", resolveUnit(constants.DurationUnit, "hours"))
 	require.Equal(t, "Deny", fieldCell(fieldDef("borrow", constants.FieldAllowBorrow), false))
-	sheet := overridesSheet(FullPlan, []model.TransactionRuleOverride{{TransactionType: "borrow", Fields: []byte(`not-json`)}})
+	sheet := overridesSheet(FullPlan, []model.TransactionRuleOverride{{TransactionType: "borrow", Fields: []byte(`not-json`)}}, exportLookups{})
 	require.Empty(t, sheet.Rows)
 }

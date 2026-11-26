@@ -16,7 +16,7 @@ func TestFindExportFields_AllCategoriesIsOneQuery(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	require.Len(t, fake.queries, 1)
-	require.True(t, fake.closed)
+	require.False(t, fake.closed)
 }
 
 func TestFindExportFields_LeafPrependsCompanyDefault(t *testing.T) {

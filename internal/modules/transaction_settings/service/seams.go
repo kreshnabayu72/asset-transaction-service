@@ -22,10 +22,17 @@ type CategoryInfo struct {
 	Leaf   bool   // a leaf Category in any state; GET, export and override create accept only leaves
 }
 
+// LeafCategory is a live leaf Category of the client: its id and full path.
+type LeafCategory struct {
+	ID   int64
+	Path string
+}
+
 // CategoryDirectory looks Categories up (settings-categories). Unset: every categoryId is accepted
 // and logged by its id.
 type CategoryDirectory interface {
 	LookupCategory(ctx context.Context, clientID string, id int64) (CategoryInfo, error)
+	ListLeafCategories(ctx context.Context, clientID string) ([]LeafCategory, error)
 }
 
 // LogTableTransactionSettings is the logTable of every change-log row of this module: the Changelog
@@ -55,9 +62,10 @@ type ChangeLogEntry struct {
 	LogTable    string
 }
 
-// ChangeLogDispatcher sends Changelog documents after commit, best-effort. Unset: no dispatch.
+// ChangeLogDispatcher sends the Changelog documents and Activity Log rows of one save after commit, best-effort, as one
+// run. Unset: no dispatch.
 type ChangeLogDispatcher interface {
-	DispatchChangeLogs(ctx context.Context, clientID string, entries []ChangeLogEntry) error
+	DispatchLogs(ctx context.Context, clientID string, changes []ChangeLogEntry, activity []ActivityLogEntry) error
 }
 
 // ActivityLogEntry is one structured Activity Log row (LLD Logs Written). Analytics-reporting stores the actor
@@ -84,7 +92,7 @@ type ActivityEntryDispatcher interface {
 // WithCategoryDirectory sets the Category provider.
 func (s *Service) WithCategoryDirectory(d CategoryDirectory) *Service { s.categories = d; return s }
 
-// WithChangeLogDispatcher sets the Changelog dispatcher.
+// WithChangeLogDispatcher sets the dispatcher of a save's Changelog and Activity Log rows.
 func (s *Service) WithChangeLogDispatcher(d ChangeLogDispatcher) *Service { s.changeLogs = d; return s }
 
 // WithActivityEntryDispatcher sets the structured Activity Log dispatcher.

@@ -30,13 +30,13 @@ func (f *fakeStarter) ExecuteWorkflow(_ context.Context, options temporalclient.
 	return nil, nil
 }
 
-func TestDispatchChangeLogsMapsEveryRequiredField(t *testing.T) {
+func TestDispatchLogsMapsEveryRequiredField(t *testing.T) {
 	starter := &fakeStarter{}
 	d := NewChangeLogDispatcher(starter, "analytics-queue")
-	err := d.DispatchChangeLogs(context.Background(), testClientID, []service.ChangeLogEntry{{
+	err := d.DispatchLogs(context.Background(), testClientID, []service.ChangeLogEntry{{
 		Action: "Edit", Entity: "Root > Leaf", Field: "Borrow (Max duration)", OldValue: "14 days", NewValue: "7 days",
 		ModifiedBy: "Rina Wulandari", CreatedByID: 42,
-	}})
+	}}, nil)
 	require.NoError(t, err)
 	require.Len(t, starter.params, 1)
 	require.Equal(t, analyticsTemporal.RecordChangeLogsWorkflowName, starter.workflows[0])
@@ -63,12 +63,12 @@ func TestDispatchChangeLogsMapsEveryRequiredField(t *testing.T) {
 	require.Equal(t, []string{}, row.ScopeGroupIDs)
 }
 
-func TestDispatchChangeLogsKeepsEmptyValuesNull(t *testing.T) {
+func TestDispatchLogsKeepsEmptyValuesNull(t *testing.T) {
 	starter := &fakeStarter{}
-	err := NewChangeLogDispatcher(starter, "q").DispatchChangeLogs(context.Background(), testClientID, []service.ChangeLogEntry{{
+	err := NewChangeLogDispatcher(starter, "q").DispatchLogs(context.Background(), testClientID, []service.ChangeLogEntry{{
 		Action: "Edit", ObjectPath: "Transaction Settings", LogTable: service.LogTableTransactionSettings,
 		CreatedByID: 1, ModifiedBy: "Rina",
-	}})
+	}}, nil)
 	require.NoError(t, err)
 	row := starter.params[0].ChangeLogs[0]
 	require.Nil(t, row.Field)
@@ -77,7 +77,7 @@ func TestDispatchChangeLogsKeepsEmptyValuesNull(t *testing.T) {
 	require.Nil(t, row.ObjectName)
 }
 
-func TestDispatchChangeLogsRefusesIncompleteRows(t *testing.T) {
+func TestDispatchLogsRefusesIncompleteRows(t *testing.T) {
 	cases := map[string]service.ChangeLogEntry{
 		"no action":     {CreatedByID: 1, ModifiedBy: "Rina"},
 		"no created by": {Action: "Edit", ModifiedBy: "Rina"},
@@ -86,27 +86,48 @@ func TestDispatchChangeLogsRefusesIncompleteRows(t *testing.T) {
 	for name, entry := range cases {
 		t.Run(name, func(t *testing.T) {
 			starter := &fakeStarter{}
-			err := NewChangeLogDispatcher(starter, "q").DispatchChangeLogs(context.Background(), testClientID, []service.ChangeLogEntry{entry})
+			err := NewChangeLogDispatcher(starter, "q").DispatchLogs(context.Background(), testClientID, []service.ChangeLogEntry{entry}, nil)
 			require.ErrorIs(t, err, errIncompleteLog)
 			require.Empty(t, starter.params, "an incomplete row must not start a workflow")
 		})
 	}
 }
 
-func TestDispatchChangeLogsWithoutEntriesStartsNothing(t *testing.T) {
+func TestDispatchLogsWithoutEntriesStartsNothing(t *testing.T) {
 	starter := &fakeStarter{}
 	d := NewChangeLogDispatcher(starter, "q")
-	require.NoError(t, d.DispatchChangeLogs(context.Background(), testClientID, nil))
+	require.NoError(t, d.DispatchLogs(context.Background(), testClientID, nil, nil))
 	require.NoError(t, d.DispatchActivityEntries(context.Background(), testClientID, nil))
 	require.Empty(t, starter.params)
 }
 
-func TestDispatchChangeLogsWrapsStartFailure(t *testing.T) {
+func TestDispatchLogsWrapsStartFailure(t *testing.T) {
 	starter := &fakeStarter{err: errors.New("temporal unreachable")}
-	err := NewChangeLogDispatcher(starter, "q").DispatchChangeLogs(context.Background(), testClientID, []service.ChangeLogEntry{{
+	err := NewChangeLogDispatcher(starter, "q").DispatchLogs(context.Background(), testClientID, []service.ChangeLogEntry{{
 		Action: "Edit", CreatedByID: 1, ModifiedBy: "Rina",
-	}})
+	}}, nil)
 	require.ErrorContains(t, err, "temporal unreachable")
+}
+
+func TestDispatchLogsStartsOneWorkflowForBothKinds(t *testing.T) {
+	starter := &fakeStarter{}
+	err := NewChangeLogDispatcher(starter, "q").DispatchLogs(context.Background(), testClientID,
+		[]service.ChangeLogEntry{{Action: "Edit", Entity: "All categories", Field: "Borrow (Max duration)", ModifiedBy: "Rina", CreatedByID: 7}},
+		[]service.ActivityLogEntry{{ActorID: 7, ActorName: "Rina", Action: "Edit", Object: "Borrow", ObjectName: "All categories", Field: "Max duration"}})
+	require.NoError(t, err)
+	require.Len(t, starter.workflows, 1, "one save starts one RecordChangeLogsWorkflow run")
+	require.Contains(t, starter.options[0].ID, "transaction-settings-changelog-client-1-")
+	rows := starter.params[0].ChangeLogs
+	require.Len(t, rows, 2)
+	require.Equal(t, "Borrow (Max duration)", *rows[0].Field)
+	require.Equal(t, "Borrow", rows[1].Object)
+	require.Equal(t, "7", rows[1].CreatedByID)
+
+	starter = &fakeStarter{}
+	err = NewChangeLogDispatcher(starter, "q").DispatchLogs(context.Background(), testClientID, nil,
+		[]service.ActivityLogEntry{{Action: "Edit", ActorName: "Rina"}})
+	require.ErrorIs(t, err, errIncompleteLog)
+	require.Empty(t, starter.params, "an incomplete row must not start a workflow")
 }
 
 func TestDispatchActivityEntriesUsesTheStructuredShape(t *testing.T) {

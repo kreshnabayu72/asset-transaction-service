@@ -46,11 +46,11 @@ func (h *Handler) ResolveEffectiveRules(c fiber.Ctx) error {
 		return bindErr.SendResponse(c)
 	}
 	if err := coreValidator.Validate.Struct(&req); err != nil {
-		return validationFailed(c, err)
+		return effectiveRulesValidationFailed(c, err)
 	}
 	ids, idErrs := parseAssetIDs(req.AssetIDs)
 	if len(idErrs) > 0 {
-		return coreEntity.UnprocessableEntity(msgValidation, idErrs).SendResponse(c)
+		return coreEntity.UnprocessableEntity(msgInvalidBody, idErrs).SendResponse(c)
 	}
 	plan, err := h.plan(c)
 	if err != nil {
@@ -68,4 +68,19 @@ func (h *Handler) ResolveEffectiveRules(c fiber.Ctx) error {
 		return coreEntity.InternalServerError(msgInternal).SendResponse(c)
 	}
 	return coreHelper.Success(c, "Success", data)
+}
+
+// effectiveRulesValidationFailed answers 422 for a POST effective-rules body. The validator names AssetIDs
+// "asset_i_ds"; the contract names the field assetIds.
+func effectiveRulesValidationFailed(c fiber.Ctx, err error) error {
+	fields := coreValidator.ParseValidationErrors(err)
+	out := make([]coreValidator.BindFieldError, 0, len(fields))
+	for _, f := range fields {
+		name := f.Field
+		if name == "asset_i_ds" {
+			name = "assetIds"
+		}
+		out = append(out, coreValidator.BindFieldError{Field: name, Message: "failed rule " + f.Rule})
+	}
+	return coreEntity.UnprocessableEntity(msgInvalidBody, out).SendResponse(c)
 }

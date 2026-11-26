@@ -8,7 +8,7 @@ import (
 // GroupScopeDirectory answers the Group tree questions of the Group Role scope of override list and delete.
 type GroupScopeDirectory struct {
 	mar marClient
-	ems emsClient
+	iam iamClient
 }
 
 // ExpandGroups returns the given Groups and all their descendants.
@@ -16,7 +16,7 @@ func (d GroupScopeDirectory) ExpandGroups(ctx context.Context, clientID string, 
 	if len(groupIDs) == 0 {
 		return nil, nil
 	}
-	tree, err := loadGroups(ctx, d.ems, clientID)
+	tree, err := loadGroups(ctx, d.iam, clientID)
 	if err != nil {
 		return nil, err
 	}

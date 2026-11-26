@@ -24,7 +24,6 @@ func (r *TransactionSettingsRepository) ListOverrides(ctx context.Context, clien
 		return nil, 0, fmt.Errorf("build override list query: %w", err)
 	}
 	svc := r.open(clientID)
-	defer svc.Close()
 
 	results := []coreDto.PaginationResult[dto.OverrideListRecord]{}
 	if err := svc.SelectMany(&results, ctx, query, args...); err != nil {
@@ -38,7 +37,6 @@ func (r *TransactionSettingsRepository) ListOverrides(ctx context.Context, clien
 // row set, for the flags set on q.
 func (r *TransactionSettingsRepository) FindOverrideOptions(ctx context.Context, clientID string, q dto.OverrideQuery) (service.OverrideOptionValues, error) {
 	svc := r.open(clientID)
-	defer svc.Close()
 
 	var out service.OverrideOptionValues
 	read := func(want bool, build func(dto.OverrideQuery) (string, []any, error), into *[]string) error {
@@ -88,7 +86,6 @@ func (r *TransactionSettingsRepository) FindOverridesForTargets(ctx context.Cont
 
 func (r *TransactionSettingsRepository) selectOverrides(ctx context.Context, clientID, query string, args []any) ([]model.TransactionRuleOverride, error) {
 	svc := r.open(clientID)
-	defer svc.Close()
 
 	var rows []model.TransactionRuleOverride
 	if err := svc.SelectMany(&rows, ctx, query, args...); err != nil {
@@ -105,7 +102,6 @@ func (r *TransactionSettingsRepository) FindDuplicateTargetIDs(ctx context.Conte
 		return nil, fmt.Errorf("build duplicate overrides query: %w", err)
 	}
 	svc := r.open(clientID)
-	defer svc.Close()
 
 	var rows []dto.DuplicateRecord
 	if err := svc.SelectMany(&rows, ctx, query, args...); err != nil {

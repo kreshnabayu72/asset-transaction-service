@@ -14,11 +14,11 @@ import (
 // errUnknownScope reports an override scope the module does not define.
 var errUnknownScope = errors.New("unknown override scope")
 
-// OverrideTargetDirectory resolves override targets: Groups from enterprise-management, Asset Names and Assets
+// OverrideTargetDirectory resolves override targets: Groups from iam-service, Asset Names and Assets
 // from master-asset-registry. Ids that do not resolve are omitted, which the service reads as deleted.
 type OverrideTargetDirectory struct {
 	mar marClient
-	ems emsClient
+	iam iamClient
 }
 
 // ResolveTargets answers the targets of one scope that exist in the caller's entity.
@@ -36,7 +36,7 @@ func (d OverrideTargetDirectory) ResolveTargets(ctx context.Context, clientID, s
 
 // groupTargets names a Group by its full path and carries its Group chain for the Group Role check.
 func (d OverrideTargetDirectory) groupTargets(ctx context.Context, clientID string, ids []int64) ([]service.OverrideTarget, error) {
-	tree, err := loadGroups(ctx, d.ems, clientID)
+	tree, err := loadGroups(ctx, d.iam, clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (d OverrideTargetDirectory) assetTargets(ctx context.Context, clientID stri
 	}
 	var tree groupTree
 	if len(items) > 0 {
-		if tree, err = loadGroups(ctx, d.ems, clientID); err != nil {
+		if tree, err = loadGroups(ctx, d.iam, clientID); err != nil {
 			return nil, err
 		}
 	}

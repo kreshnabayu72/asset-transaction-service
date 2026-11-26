@@ -17,7 +17,7 @@ func TestFindNodeFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Len(t, fake.queries, 1)
-	require.True(t, fake.closed)
+	require.False(t, fake.closed)
 }
 
 func TestFindNodeFields_Error(t *testing.T) {
@@ -25,7 +25,7 @@ func TestFindNodeFields_Error(t *testing.T) {
 	id := int64(3)
 	_, err := NewTransactionSettingsRepository(fake.factory()).FindNodeFields(context.Background(), "c1", &id)
 	require.ErrorContains(t, err, "db down")
-	require.True(t, fake.closed)
+	require.False(t, fake.closed)
 }
 
 func TestFindSettingsVersion(t *testing.T) {

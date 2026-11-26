@@ -78,7 +78,6 @@ type owners struct {
 	groups      []emshttp.GroupItem
 	contact     iamhttp.ManagerContactResponse
 	failMAR     bool
-	failEMS     bool
 	failIAM     bool
 	groupCalls  atomic.Int32
 	lastContact atomic.Int64
@@ -118,12 +117,12 @@ func (o *owners) clients(t *testing.T) (marClient, emsClient, iamClient) {
 		}
 		envelope(w, marhttp.AssetNameLookupData{Results: o.assetNames})
 	})
-	mux.HandleFunc("GET /internal/groups", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /internal/fixed-asset-groups", func(w http.ResponseWriter, r *http.Request) {
 		if !authorized(w, r) {
 			return
 		}
 		o.groupCalls.Add(1)
-		if o.failEMS {
+		if o.failIAM {
 			http.Error(w, "down", http.StatusInternalServerError)
 			return
 		}

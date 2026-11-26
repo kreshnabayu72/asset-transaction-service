@@ -157,7 +157,7 @@ func New(appConfig config.AppConfig) *App {
 		settingsSvc = settingsSvc.WithChangeLogDispatcher(txChangeLogs).WithActivityEntryDispatcher(txChangeLogs)
 	}
 	transaction_settings.SetupRoutes(fiberApp, transactionSettingsHandler.NewHandler(settingsSvc,
-		transactionSettingsHandler.PlanFromProvider(txProviders.Plans.Plan)))
+		transactionSettingsHandler.PlanFromProvider(txProviders.Plans.Plan)).WithEntity(txProviders.Entities.EntityType).WithClientStatus(txProviders.Entities.ClientStatus))
 	service_center.SetupPublicRoutes(fiberApp, appConfig.PostgresDB, changeLogDispatcher)
 
 	return &App{

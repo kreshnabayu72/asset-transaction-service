@@ -22,7 +22,6 @@ func (r *TransactionSettingsRepository) BeginSave(ctx context.Context, clientID 
 	svc := r.open(clientID)
 	tx, err := svc.GetPool().Begin(ctx)
 	if err != nil {
-		svc.Close()
 		return nil, fmt.Errorf("begin settings save transaction: %w", err)
 	}
 	svc.SetTransaction(tx)
@@ -72,5 +71,6 @@ func (t *SaveTransaction) Commit(ctx context.Context) error { return t.svc.Commi
 // Rollback rolls the transaction back.
 func (t *SaveTransaction) Rollback(ctx context.Context) error { return t.svc.RollbackTransaction(ctx) }
 
-// Close releases the servicer.
-func (t *SaveTransaction) Close() { t.svc.Close() }
+// Close is a no-op: be-core-utils shares one connection pool per database, so closing the servicer would
+// close it for every request. Commit or Rollback ends the transaction.
+func (t *SaveTransaction) Close() {}

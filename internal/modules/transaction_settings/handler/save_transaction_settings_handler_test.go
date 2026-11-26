@@ -24,6 +24,10 @@ func (f fakeCategories) LookupCategory(context.Context, string, int64) (service.
 	return f.info, nil
 }
 
+func (f fakeCategories) ListLeafCategories(context.Context, string) ([]service.LeafCategory, error) {
+	return nil, nil
+}
+
 type fakeAssets struct {
 	ids []int64
 	err error
@@ -109,7 +113,7 @@ func TestSaveHandler_StructValidation(t *testing.T) {
 	} {
 		code, resp := send(t, saveApp(&fakeRepo{}, okIdentity), http.MethodPatch, "/settings", body)
 		require.Equal(t, http.StatusUnprocessableEntity, code, body)
-		require.Contains(t, resp, "Validation failed")
+		require.Contains(t, resp, "Invalid request body")
 		require.Contains(t, resp, `"field"`)
 	}
 }
@@ -123,7 +127,7 @@ func TestSaveHandler_ServiceValidation(t *testing.T) {
 		Error   []dto.FieldError `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(resp), &parsed))
-	require.Equal(t, "Validation failed", parsed.Message)
+	require.Equal(t, "Invalid request body", parsed.Message)
 	require.Equal(t, []dto.FieldError{{Field: "fields[0].value", Message: "Value must be at least 1"}}, parsed.Error)
 }
 

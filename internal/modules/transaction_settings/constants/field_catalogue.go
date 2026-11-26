@@ -28,47 +28,48 @@ var AllCategoriesOnlyTransactions = []string{TransactionDamagedMissing, Transact
 
 // Field keys (OpenAPI `SettingField.key`).
 const (
-	FieldAllowBorrow                = "allow_borrow"
-	FieldAllowAssign                = "allow_assign"
-	FieldAllowTransfer              = "allow_transfer"
-	FieldAllowDisposal              = "allow_disposal"
-	FieldDurationUnit               = "duration_unit"
-	FieldMaxDuration                = "max_duration"
-	FieldMaxExtensions              = "max_extensions"
-	FieldMaxAssetsPerBorrower       = "max_assets_per_borrower"
-	FieldAllowedBorrower            = "allowed_borrower"
-	FieldBlockNewBorrowWhenOverdue  = "block_new_borrow_when_overdue"
-	FieldAllowedAssigneeEmployee    = "allowed_assignee_employee"
-	FieldAllowedAssigneeDivision    = "allowed_assignee_division"
-	FieldMaxAssetsPerAssignee       = "max_assets_per_assignee"
-	FieldNeedRecipientConfirmation  = "need_recipient_confirmation"
-	FieldDestinationScope           = "destination_scope"
-	FieldChangeCostCenterWithGroup  = "change_cost_center_with_group"
-	FieldInTransitOverdueAfter      = "in_transit_overdue_after"
-	FieldDestinationQuotaCheck      = "destination_quota_check"
-	FieldAllowedDisposalTypes       = "allowed_disposal_types"
-	FieldMinAssetAgeWarning         = "min_asset_age_warning"
-	FieldMaxDeviationFromBookValue  = "max_deviation_from_book_value"
-	FieldLongMissingAfter           = "long_missing_after"
-	FieldPhotoAtStart               = "photo_at_start"
-	FieldPhotoAtEnd                 = "photo_at_end"
-	FieldAfterPhotoRequired         = "after_photo_required"
-	FieldTransactionTimeout         = "transaction_timeout"
-	FieldDueDateReminders           = "due_date_reminders"
-	FieldRequireApproval            = "require_approval"
-	FieldApprovalType               = "approval_type"
-	FieldApprovalScope              = "approval_scope"
-	FieldSelfService                = "self_service"
-	FieldAutoApprove                = "auto_approve"
-	FieldAutoApproveMaxDuration     = "auto_approve_max_duration"
-	FieldAutoApproveSameParentGroup = "auto_approve_same_parent_group"
-	FieldSendEmailNotifications     = "send_email_notifications"
-	FieldGracePeriod                = "grace_period"
-	FieldRequireLocation            = "require_location"
-	FieldReminderBeforeDue          = "reminder_before_due"
-	FieldPhotoAfter                 = "photo_after"
-	FieldRequireApprovalToClose     = "require_approval_to_close"
-	FieldRequireScanToStart         = "require_scan_to_start"
+	FieldAllowBorrow                  = "allow_borrow"
+	FieldAllowAssign                  = "allow_assign"
+	FieldAllowTransfer                = "allow_transfer"
+	FieldAllowDisposal                = "allow_disposal"
+	FieldDurationUnit                 = "duration_unit"
+	FieldMaxDuration                  = "max_duration"
+	FieldMaxExtensions                = "max_extensions"
+	FieldMaxAssetsPerBorrower         = "max_assets_per_borrower"
+	FieldAllowedBorrower              = "allowed_borrower"
+	FieldBlockNewBorrowWhenOverdue    = "block_new_borrow_when_overdue"
+	FieldAllowedAssigneeEmployee      = "allowed_assignee_employee"
+	FieldAllowedAssigneeDivision      = "allowed_assignee_division"
+	FieldMaxAssetsPerAssignee         = "max_assets_per_assignee"
+	FieldNeedRecipientConfirmation    = "need_recipient_confirmation"
+	FieldDirectHandoverBetweenHolders = "direct_handover_between_holders"
+	FieldDestinationScope             = "destination_scope"
+	FieldChangeCostCenterWithGroup    = "change_cost_center_with_group"
+	FieldInTransitOverdueAfter        = "in_transit_overdue_after"
+	FieldDestinationQuotaCheck        = "destination_quota_check"
+	FieldAllowedDisposalTypes         = "allowed_disposal_types"
+	FieldMinAssetAgeWarning           = "min_asset_age_warning"
+	FieldMaxDeviationFromBookValue    = "max_deviation_from_book_value"
+	FieldLongMissingAfter             = "long_missing_after"
+	FieldPhotoAtStart                 = "photo_at_start"
+	FieldPhotoAtEnd                   = "photo_at_end"
+	FieldAfterPhotoRequired           = "after_photo_required"
+	FieldTransactionTimeout           = "transaction_timeout"
+	FieldDueDateReminders             = "due_date_reminders"
+	FieldRequireApproval              = "require_approval"
+	FieldApprovalType                 = "approval_type"
+	FieldApprovalScope                = "approval_scope"
+	FieldSelfService                  = "self_service"
+	FieldAutoApprove                  = "auto_approve"
+	FieldAutoApproveMaxDuration       = "auto_approve_max_duration"
+	FieldAutoApproveSameParentGroup   = "auto_approve_same_parent_group"
+	FieldSendEmailNotifications       = "send_email_notifications"
+	FieldGracePeriod                  = "grace_period"
+	FieldRequireLocation              = "require_location"
+	FieldReminderBeforeDue            = "reminder_before_due"
+	FieldPhotoAfter                   = "photo_after"
+	FieldRequireApprovalToClose       = "require_approval_to_close"
+	FieldRequireScanToStart           = "require_scan_to_start"
 )
 
 // Choice-field tokens (OpenAPI `FieldValue` value catalogue; lowercase snake_case of the option label).
@@ -168,6 +169,7 @@ var Catalogue = map[string][]FieldDef{
 		{Key: FieldAllowedAssigneeDivision, Default: true},
 		{Key: FieldMaxAssetsPerAssignee, Default: 0},
 		{Key: FieldNeedRecipientConfirmation, Default: true, BoolLabels: LabelsYesNo},
+		{Key: FieldDirectHandoverBetweenHolders, Default: true, BoolLabels: LabelsAllowDeny},
 		{Key: FieldRequireApproval, Default: false},
 		{Key: FieldApprovalType, Default: ValueAnyOneApprover},
 		{Key: FieldPhotoAtStart, Default: true},
@@ -237,7 +239,7 @@ var ApprovalWorkflowGatedFields = []string{
 // (Disposal gates none).
 var BasicGatedFields = map[string][]string{
 	TransactionBorrow:   {FieldSelfService, FieldDurationUnit},
-	TransactionAssign:   {FieldAllowedAssigneeEmployee, FieldAllowedAssigneeDivision},
+	TransactionAssign:   {FieldDirectHandoverBetweenHolders},
 	TransactionTransfer: {FieldApprovalScope, FieldInTransitOverdueAfter, FieldPhotoAtEnd},
 }
 

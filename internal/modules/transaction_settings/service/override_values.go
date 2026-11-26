@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 
 	"gitea.tagsamurai.local/BETS-V2/asset-transaction-service/internal/modules/transaction_settings/constants"
@@ -19,11 +20,7 @@ const (
 	msgNotLeaf        = "Category must be a leaf Category"
 	msgInvalidID      = "must be a positive numeric id"
 	msgInvalidChoice  = "Value is not a valid option"
-	msgInvalidRange   = "createdAt must be a range with from <= to"
-	msgInvalidPage    = "page must be at least 1"
-	msgInvalidLimit   = "limit must be 10, 25, 50 or 100"
-	msgInvalidSort    = "sortBy is not a sortable column"
-	msgInvalidOrder   = "sortOrder must be 1 or -1"
+	msgInvalidRange   = "from must not be after to"
 	msgPickColumns    = "columns is required"
 	msgPickIDs        = "ids must hold at least one id"
 )
@@ -97,13 +94,20 @@ func assignState(layers []map[string]any, cat, company fieldIndex) (deny, bothOf
 		get(constants.FieldAllowedAssigneeEmployee) == false && get(constants.FieldAllowedAssigneeDivision) == false
 }
 
-// overriddenDefs returns the fields set by the override in catalogue order.
+// overriddenDefs returns the fields set by the override in display order (DQ-80 B): catalogue
+// order, with Self service placed directly before Duration unit when both are set.
 func overriddenDefs(tx string, fields map[string]any) []constants.FieldDef {
 	var out []constants.FieldDef
 	for _, def := range constants.Catalogue[tx] {
 		if _, ok := fields[def.Key]; ok {
 			out = append(out, def)
 		}
+	}
+	self := slices.IndexFunc(out, func(d constants.FieldDef) bool { return d.Key == constants.FieldSelfService })
+	unit := slices.IndexFunc(out, func(d constants.FieldDef) bool { return d.Key == constants.FieldDurationUnit })
+	if unit >= 0 && self > unit {
+		selfDef := out[self]
+		out = slices.Insert(slices.Delete(out, self, self+1), unit, selfDef)
 	}
 	return out
 }

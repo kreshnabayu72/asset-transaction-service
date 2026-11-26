@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -60,9 +59,19 @@ func (s *Service) ExportTransactionSettings(ctx context.Context, in ExportInput)
 	if err != nil {
 		return nil, fmt.Errorf("read export overrides: %w", err)
 	}
+	lk, err := s.loadExportLookups(ctx, in.ClientID, fields, overrides)
+	if err != nil {
+		return nil, err
+	}
+	var leaves []LeafCategory
+	if in.CategoryID == nil && s.categories != nil {
+		if leaves, err = s.categories.ListLeafCategories(ctx, in.ClientID); err != nil {
+			return nil, fmt.Errorf("list leaf categories: %w", err)
+		}
+	}
 	sheets := []dto.Sheet{
-		rulesSheet(category, in.CategoryID, in.Plan, fields),
-		overridesSheet(in.Plan, overrides),
+		rulesSheet(category, in.CategoryID, in.Plan, fields, leaves),
+		overridesSheet(in.Plan, overrides, lk),
 		infoSheet(category, in, version),
 	}
 	data, err := s.renderer.Render(sheets)
@@ -86,21 +95,92 @@ func categoryLabel(id *int64, info CategoryInfo) string {
 	}
 }
 
+// exportLookups are the directory answers of an export: each Category of its rows (full path and leaf
+// state) and whether each override target still exists. An unset directory answers nothing: every
+// Category is then listed by its id and every target is kept.
+type exportLookups struct {
+	categories     map[int64]CategoryInfo
+	removedTargets map[string]map[int64]bool // scope -> target id -> removed
+}
+
+// loadExportLookups asks the Category and override target directories for the rows of the node.
+func (s *Service) loadExportLookups(ctx context.Context, clientID string, fields []model.TransactionRuleField, overrides []model.TransactionRuleOverride) (exportLookups, error) {
+	lk := exportLookups{categories: map[int64]CategoryInfo{}, removedTargets: map[string]map[int64]bool{}}
+	if s.categories != nil {
+		lookup := func(id *int64) error {
+			if id == nil {
+				return nil
+			}
+			if _, done := lk.categories[*id]; done {
+				return nil
+			}
+			info, err := s.categories.LookupCategory(ctx, clientID, *id)
+			if err != nil {
+				return fmt.Errorf("look up category: %w", err)
+			}
+			lk.categories[*id] = info
+			return nil
+		}
+		for _, r := range fields {
+			if err := lookup(r.CategoryID); err != nil {
+				return lk, err
+			}
+		}
+		for _, o := range overrides {
+			if err := lookup(o.CategoryID); err != nil {
+				return lk, err
+			}
+		}
+	}
+	if s.targets != nil {
+		idsByScope := map[string][]int64{}
+		for _, o := range overrides {
+			idsByScope[o.Scope] = append(idsByScope[o.Scope], o.TargetID)
+		}
+		for scope, ids := range idsByScope {
+			list, err := s.targets.ResolveTargets(ctx, clientID, scope, ids)
+			if err != nil {
+				return lk, fmt.Errorf("resolve override targets: %w", err)
+			}
+			alive := map[int64]bool{}
+			for _, t := range list {
+				alive[t.ID] = t.Exists
+			}
+			lk.removedTargets[scope] = map[int64]bool{}
+			for _, id := range ids {
+				lk.removedTargets[scope][id] = !alive[id]
+			}
+		}
+	}
+	return lk, nil
+}
+
+// categoryLive is false for a Category that is deleted or no longer a leaf: its stored values leave Rules.
+func (lk exportLookups) categoryLive(id int64) bool {
+	info, ok := lk.categories[id]
+	return !ok || (info.Exists && info.Leaf)
+}
+
+// overrideApplied is false when the override's target or Category is removed or the field is plan-gated.
+func (lk exportLookups) overrideApplied(o model.TransactionRuleOverride, key string, plan Plan) bool {
+	if o.CategoryID != nil && !lk.categoryLive(*o.CategoryID) {
+		return false
+	}
+	return !lk.removedTargets[o.Scope][o.TargetID] && !fieldGated(o.TransactionType, key, plan)
+}
+
 // rulesSheet lists one row per node x transaction x field for transactions available on the plan.
 // A leaf export lists that Category; an All categories export lists the Company default, then every
-// Category that has stored rows. A field without an own value at a Category shows the Company default.
-func rulesSheet(category string, categoryID *int64, plan Plan, rows []model.TransactionRuleField) dto.Sheet {
+// live Category that has stored rows (a deleted or parent Category has none). A field without an own
+// value at a Category shows the Company default.
+func rulesSheet(category string, categoryID *int64, plan Plan, rows []model.TransactionRuleField, leaves []LeafCategory) dto.Sheet {
 	sheet := dto.Sheet{Name: "Rules", Headers: []string{"Category", "Transaction", "Field", "Value", "Unit", "Source"}, Rows: [][]any{}}
 	var companyRows []model.TransactionRuleField
 	byCategory := map[int64][]model.TransactionRuleField{}
-	var order []int64
 	for _, r := range rows {
 		if r.CategoryID == nil {
 			companyRows = append(companyRows, r)
 			continue
-		}
-		if _, seen := byCategory[*r.CategoryID]; !seen {
-			order = append(order, *r.CategoryID)
 		}
 		byCategory[*r.CategoryID] = append(byCategory[*r.CategoryID], r)
 	}
@@ -109,8 +189,8 @@ func rulesSheet(category string, categoryID *int64, plan Plan, rows []model.Tran
 		return appendRules(sheet, category, true, plan, company, newFieldIndex(byCategory[*categoryID]))
 	}
 	sheet = appendRules(sheet, category, false, plan, company, nil)
-	for _, id := range order {
-		sheet = appendRules(sheet, strconv.FormatInt(id, 10), true, plan, company, newFieldIndex(byCategory[id]))
+	for _, leaf := range leaves {
+		sheet = appendRules(sheet, leaf.Path, true, plan, company, newFieldIndex(byCategory[leaf.ID]))
 	}
 	return sheet
 }
@@ -129,7 +209,7 @@ func appendRules(sheet dto.Sheet, label string, atLeaf bool, plan Plan, company,
 			if v, ok := own.own(tx, f.Key); ok {
 				value, source = v, label
 			}
-			sheet.Rows = append(sheet.Rows, []any{label, tx, f.Key, fieldCell(f, value), exportUnit(resolveUnit(f.Unit, durationUnit)), source})
+			sheet.Rows = append(sheet.Rows, []any{label, constants.TransactionLabels[tx], constants.FieldLabels[f.Key], fieldCell(f, value), exportUnit(resolveUnit(f.Unit, durationUnit)), source})
 		}
 	}
 	return sheet
@@ -188,10 +268,10 @@ func fieldDef(tx, key string) constants.FieldDef {
 	return constants.FieldDef{Key: key}
 }
 
-// overridesSheet lists one row per changed field of each stored override, omitting transactions
-// whose Feature Suite level is None. The not-applied status (LLD export step 4: a deleted target or
-// Category, or a plan-gated field) is not computed yet, so every row reads Applied (open gap).
-func overridesSheet(plan Plan, overrides []model.TransactionRuleOverride) dto.Sheet {
+// overridesSheet lists one row per changed field of each stored override in catalogue order, omitting
+// transactions whose Feature Suite level is None. A row reads Not applied when its target or Category is
+// removed or its field is plan-gated (LLD export step 4).
+func overridesSheet(plan Plan, overrides []model.TransactionRuleOverride, lk exportLookups) dto.Sheet {
 	sheet := dto.Sheet{
 		Name:    "Overrides",
 		Headers: []string{"Scope", "Target", "Category", "Transaction", "Field", "Value", "Unit", "Status", "Created By", "Created At"},
@@ -205,16 +285,18 @@ func overridesSheet(plan Plan, overrides []model.TransactionRuleOverride) dto.Sh
 		if err := json.Unmarshal(o.Fields, &values); err != nil {
 			continue
 		}
-		keys := make([]string, 0, len(values))
-		for k := range values {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			def := fieldDef(o.TransactionType, k)
+		for _, def := range constants.Catalogue[o.TransactionType] {
+			raw, ok := values[def.Key]
+			if !ok {
+				continue
+			}
+			status := "Applied"
+			if !lk.overrideApplied(o, def.Key, plan) {
+				status = "Not applied"
+			}
 			sheet.Rows = append(sheet.Rows, []any{
-				scopeLabel(o.Scope), exportCell(o.TargetName), overrideCategory(o), o.TransactionType, k,
-				fieldCell(def, decodeStored(values[k])), exportUnit(resolveUnit(def.Unit, overrideDurationUnit(values))), "Applied",
+				scopeLabel(o.Scope), exportCell(o.TargetName), overrideCategory(o), constants.TransactionLabels[o.TransactionType], constants.FieldLabels[def.Key],
+				fieldCell(def, decodeStored(raw)), exportUnit(resolveUnit(def.Unit, overrideDurationUnit(values))), status,
 				exportCell(o.CreatedByName), o.CreatedAt.Format(exportTimeLayout),
 			})
 		}

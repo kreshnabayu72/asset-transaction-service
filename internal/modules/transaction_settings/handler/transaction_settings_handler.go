@@ -18,6 +18,12 @@ import (
 // PlanReader returns the caller entity's plan for the request; an error (a provider failure) answers 500.
 type PlanReader func(c fiber.Ctx) (service.Plan, error)
 
+// EntityReader returns the entity type of the caller's tenant: "client" for a Client tenant, "principal", "distributor"
+// or "partner" for a network actor. An error answers 500.
+type EntityReader func(ctx context.Context, clientID string) (string, error)
+
+type StatusReader func(ctx context.Context, clientID string) (string, error)
+
 // Identity is the caller of a request: tenant, user id and full name.
 type Identity struct {
 	ClientID string
@@ -35,6 +41,8 @@ type Handler struct {
 	svc      *service.Service
 	plan     PlanReader
 	identity IdentityReader
+	entity   EntityReader
+	status   StatusReader
 }
 
 // NewHandler builds the handler; the caller identity comes from the LoadUserRoles snapshot.
@@ -53,6 +61,32 @@ func PlanFromProvider(read func(ctx context.Context, clientID string) (service.P
 func (h *Handler) WithIdentity(r IdentityReader) *Handler {
 	h.identity = r
 	return h
+}
+
+// WithEntity sets the entity type reader of the network-actor gate.
+func (h *Handler) WithEntity(r EntityReader) *Handler {
+	h.entity = r
+	return h
+}
+
+func (h *Handler) WithClientStatus(r StatusReader) *Handler {
+	h.status = r
+	return h
+}
+
+// EntityType returns the entity type of the caller's tenant; a handler without a reader answers an error.
+func (h *Handler) EntityType(ctx context.Context, clientID string) (string, error) {
+	if h.entity == nil {
+		return "", errors.New("entity type reader is not configured")
+	}
+	return h.entity(ctx, clientID)
+}
+
+func (h *Handler) ClientStatus(ctx context.Context, clientID string) (string, error) {
+	if h.status == nil {
+		return "", errors.New("client status reader is not configured")
+	}
+	return h.status(ctx, clientID)
 }
 
 func requestIdentity(c fiber.Ctx) (Identity, error) {
@@ -96,8 +130,14 @@ func parseCategoryID(raw *string) (*int64, error) {
 		}
 	}
 	id, err := strconv.ParseInt(*raw, 10, 64)
+	if errors.Is(err, strconv.ErrRange) {
+		return nil, errCategoryIDOutOfRange
+	}
 	if err != nil || id <= 0 {
 		return nil, errMalformedCategoryID
 	}
 	return &id, nil
 }
+
+// errCategoryIDOutOfRange is a numeric categoryId beyond int64: no Category matches it, so the GET answers 404 (SD-3).
+var errCategoryIDOutOfRange = errors.New("categoryId is beyond int64")

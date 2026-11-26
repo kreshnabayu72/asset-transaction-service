@@ -15,6 +15,9 @@ import (
 func (h *Handler) ReadTransactionSettings(c fiber.Ctx) error {
 	raw := c.Query("categoryId")
 	categoryID, err := parseCategoryID(&raw)
+	if errors.Is(err, errCategoryIDOutOfRange) {
+		return coreEntity.NotFound("Not found").SendResponse(c)
+	}
 	if err != nil {
 		return coreEntity.BadRequest(msgInvalidBody).SendResponse(c)
 	}
