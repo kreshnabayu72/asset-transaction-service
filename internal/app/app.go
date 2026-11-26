@@ -169,15 +169,6 @@ func New(appConfig config.AppConfig) *App {
 	}
 }
 
-// RunWorker runs the tenant migration activities on this service's Temporal queue until ctx is done.
-func (a *App) RunWorker(ctx context.Context) error {
-	if a.temporalService == nil {
-		<-ctx.Done()
-		return nil
-	}
-	return a.temporalService.Run(ctx, nil)
-}
-
 // Run starts the HTTP server.
 func (a *App) Run() error {
 	return a.httpApp.Listen(":" + a.port)
